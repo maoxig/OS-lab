@@ -1,5 +1,4 @@
 #include <stdarg.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,7 +10,6 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <stdbool.h>
-#include <signal.h>
 #include <signal.h>
 
 // 函数声明
@@ -34,8 +32,8 @@ void sh_handle_child_signal(int signum);
 void sh_register_signal_handler();
 
 // 数据区
-#define BUFFER_SIZE 1024
-#define BUILTIN_FUNCTION_NUM 5
+#define BUFFER_SIZE 4096
+#define BUILTIN_FUNCTION_NUM 4
 
 void (*functionPointers[BUILTIN_FUNCTION_NUM])() = {sh_exit, sh_cd, sh_paths, sh_bg};
 char functionStrings[BUILTIN_FUNCTION_NUM][20] = {
@@ -49,7 +47,7 @@ char PATH[1024][1024] = {
     "/bin",
 };
 
-char *tokens[64];
+char *tokens[128];
 int nr_token = 0;
 
 // 用链表来记录后台任务
@@ -65,21 +63,25 @@ int numBgTasks = 0;
 // 函数实现
 void sh_banner()
 {
-  printf("Welcome to my shell!\n\n");
+  ; // printf("Welcome to my shell!\n\n");
 }
 
 // 提示，显示当前工作路径
 void sh_prompt()
 {
-  char buf[1024];
-  if (getcwd(buf, sizeof(buf)) != NULL)
-  {
-    printf("%s> ", buf);
-  }
-  else
-  {
-    printf("Unknown CWD> ");
-  }
+  // char buf[1024];
+  // if (getcwd(buf, sizeof(buf)) != NULL)
+  // {
+  //   // printf("%s> ", buf);
+  //   printf("nsh> ");
+  // }
+  // else
+  // {
+  //   printf("%s", error_message);
+  //   fflush(stdout);
+  // }
+
+  printf("nsh> ");
 }
 // 退出
 void sh_exit()
@@ -91,12 +93,14 @@ void sh_cd(char *args[])
 {
   if (args[1] == NULL)
   {
-    printf("Too few parameters!\n");
+    printf("%s", error_message);
+    fflush(stdout);
     return;
   }
   if (args[2] != NULL)
   {
-    printf("Too many parameters!args[2]:%s\n", args[2]);
+    printf("%s", error_message);
+    fflush(stdout);
     return;
   }
 
@@ -109,8 +113,10 @@ void sh_cd(char *args[])
   }
   if (chdir(directory) != 0)
   {
-    perror("cd");
+    printf("%s", error_message);
+    fflush(stdout);
   }
+  fflush(stdout);
 }
 // 环境变量PATH,ex: paths /usr/bin /bin
 void sh_paths(char *args[])
@@ -156,7 +162,8 @@ void sh_redirection(int p, int q, char *filepath)
   int fd = open(filepath, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
   if (fd == -1)
   {
-    perror("open");
+    // printf("%s", error_message);
+    // fflush(stdout);
     exit(EXIT_FAILURE);
   }
   // 保存标准输出和标准错误的文件描述符
@@ -164,14 +171,16 @@ void sh_redirection(int p, int q, char *filepath)
   int stderr_fd = dup(2);
   if (stdout_fd == -1 || stderr_fd == -1)
   {
-    perror("dup");
+    // printf("%s", error_message);
+    // fflush(stdout);
     exit(EXIT_FAILURE);
   }
 
   // 重定向标准输出和标准错误到文件
   if (dup2(fd, 1) == -1 || dup2(fd, 2) == -1)
   {
-    perror("dup2");
+    // printf("%s", error_message);
+    // fflush(stdout);
     exit(EXIT_FAILURE);
   }
 
@@ -179,7 +188,8 @@ void sh_redirection(int p, int q, char *filepath)
   // 恢复标准输出和标准错误
   if (dup2(stdout_fd, 1) == -1 || dup2(stderr_fd, 2) == -1)
   {
-    perror("dup2");
+    // printf("%s", error_message);
+    // fflush(stdout);
     exit(EXIT_FAILURE);
   }
 
@@ -191,7 +201,8 @@ void sh_pipe(int p, int q, int major)
   int pipefd[2];
   if (pipe(pipefd) == -1)
   {
-    printf("Failed to create pipe\n");
+    // printf("%s", error_message);
+    // fflush(stdout);
     return;
   }
   pid_t pid1 = fork();
@@ -202,20 +213,23 @@ void sh_pipe(int p, int q, int major)
     // 将标准输出重定向到管道写入端
     if (dup2(pipefd[1], STDOUT_FILENO) == -1)
     {
-      printf("Failed to redirect output to pipe\n");
+      // printf("%s", error_message);
+      // fflush(stdout);
       close(pipefd[1]);
       exit(EXIT_FAILURE);
     }
 
     sh_handle_cmd(p, major - 1);
 
-    printf("Failed to execute command: %s\n", tokens[p]);
+    // printf("%s", error_message);
+    // fflush(stdout);
     close(pipefd[1]);
     exit(EXIT_FAILURE);
   }
   else if (pid1 > 1)
   {
     // 父进程
+
     //  创建子进程2，用于执行命令2
     pid_t pid2 = fork();
     if (pid2 == 0)
@@ -225,7 +239,8 @@ void sh_pipe(int p, int q, int major)
       // 将标准输入重定向到管道读取端
       if (dup2(pipefd[0], STDIN_FILENO) == -1)
       {
-        printf("Failed to redirect input from pipe\n");
+        // printf("%s", error_message);
+        // fflush(stdout);
         close(pipefd[0]);
         exit(EXIT_FAILURE);
       }
@@ -245,18 +260,19 @@ void sh_pipe(int p, int q, int major)
     }
     else
     {
-      printf("Failed to create child process\n");
+      // printf("%s", error_message);
+      // fflush(stdout);
       close(pipefd[0]);
       close(pipefd[1]);
       return;
     }
-
     // 等待子进程1执行完毕
     waitpid(pid1, NULL, 0);
   }
   else
   {
-    printf("Failed to create child process\n");
+    // printf("%s", error_message);
+    // fflush(stdout);
     close(pipefd[0]);
     close(pipefd[1]);
     return;
@@ -272,7 +288,8 @@ void sh_run_in_bg(int p, int q)
   if (pid < 0)
   {
     // 创建子进程失败
-    perror("fork() failed");
+    printf("%s", error_message);
+    fflush(stdout);
     exit(EXIT_FAILURE);
   }
   else if (pid == 0)
@@ -288,7 +305,8 @@ void sh_run_in_bg(int p, int q)
     struct BackgroundTask *new_task = malloc(sizeof(struct BackgroundTask));
     if (new_task == NULL)
     {
-      perror("malloc() failed");
+      printf("%s", error_message);
+      fflush(stdout);
       exit(EXIT_FAILURE);
     }
     new_task->pid = pid;
@@ -303,7 +321,8 @@ void sh_run_in_bg(int p, int q)
       int written = snprintf(new_task->cmd + length, remaining, "%s ", tokens[i]);
       if (written >= remaining)
       {
-        printf("Command too long, truncated.\n");
+        printf("%s", error_message);
+        fflush(stdout);
         break;
       }
       length += written;
@@ -326,7 +345,8 @@ void sh_run_in_bg(int p, int q)
       index++;
     }
 
-    printf("[%d] %d %s\n", index, pid, new_task->cmd);
+    printf("Process %d %s: running in background\n", pid, new_task->cmd);
+    // printf("[%d] %d %s\n", index, pid, new_task->cmd);
   }
 }
 
@@ -341,7 +361,7 @@ int sh_exe(const char *executable, char *args[])
       return 0;
     }
   }
-  char filepath[2048];
+  char filepath[BUFFER_SIZE];
   int is_access = 0;
   if (access(executable, X_OK) == 0) // 本身就可以执行
   {
@@ -369,26 +389,44 @@ int sh_exe(const char *executable, char *args[])
     pid_t pid = fork();
     if (pid == -1)
     {
-      perror("fork");
+      // printf("%s", error_message);
+      // fflush(stdout);
       return EXIT_FAILURE;
     }
     else if (pid == 0)
     {
       // 子进程
+      close(STDERR_FILENO);
       execv(filepath, args);
-      exit(EXIT_SUCCESS);
     }
     else
     {
       // 父进程
       int status;
       waitpid(pid, &status, 0); // 等待子进程完成
+      if (WIFEXITED(status))
+      {
+        int exit_status = WEXITSTATUS(status);
+        if (exit_status != 0)
+        {
+          perror("a子进程执行失败");
+          printf("123%s", error_message);
+          fflush(stdout);
+        }
+      }
+      else
+      {
+        // printf("%s", error_message);
+        // fflush(stdout);
+      }
+
       return 0;
     }
   }
   else
   {
-    printf("Unknown shell command!\n");
+    // printf("%s", error_message);
+    // fflush(stdout);
     return 1;
   }
 }
@@ -409,6 +447,7 @@ void sh_handle_cmd(int p, int q)
     int major = sh_find_major(p, q);
     if (major == -1) // 这说明这里直接就是一条指令了，可以直接执行
     {
+
       int num_elements = q - p + 1;
       char **new_tokens = malloc((num_elements + 1) * sizeof(char *));
       for (int i = 0; i < num_elements; i++)
@@ -417,6 +456,7 @@ void sh_handle_cmd(int p, int q)
       }
       new_tokens[num_elements] = NULL;
       sh_exe(new_tokens[0], new_tokens);
+
       for (int i = 0; i < num_elements; i++) // 这里内存释放有待商榷
       {
         free(new_tokens[i]);
@@ -427,7 +467,15 @@ void sh_handle_cmd(int p, int q)
 
     if (strcmp(tokens[major], "|") == 0)
     {
-      sh_pipe(p, q, major);
+      if (major == p || major == q)
+      {
+        printf("%s", error_message);
+        fflush(stdout);
+      }
+      else
+      {
+        sh_pipe(p, q, major);
+      }
     }
     else if (strcmp(tokens[major], "&") == 0)
     {
@@ -443,7 +491,16 @@ void sh_handle_cmd(int p, int q)
     }
     else if (strcmp(tokens[major], ";") == 0)
     {
-      sh_handle_cmd(p, major - 1);
+      if (p == major) // If there is no thing before major
+      {
+        printf("%s", error_message);
+        fflush(stdout);
+      }
+      else
+      {
+        sh_handle_cmd(p, major - 1);
+      }
+
       sh_handle_cmd(major + 1, q);
     }
   }
@@ -590,7 +647,8 @@ int sh_find_major(int p, int q)
       parenthesesCount--;
       if (parenthesesCount < 0)
       {
-        printf("Unclosed parentheses!\n");
+        // printf("%s", error_message);
+        // fflush(stdout);
         return -1;
       }
     }
@@ -635,12 +693,12 @@ void sh_handle_child_signal(int signum)
     // 处理子进程结束
     if (WIFEXITED(status))
     {
-      //printf("Child process %d exited with status %d\n", pid, WEXITSTATUS(status));
-      // 更新任务状态、从链表中移除任务
+      // printf("Child process %d exited with status %d\n", pid, WEXITSTATUS(status));
+      //  更新任务状态、从链表中移除任务
 
       if (bgTaskList == NULL)
       {
-        //printf("Error: Background task list is empty.\n");
+        // printf("Error: Background task list is empty.\n");
         ;
       }
       else if (bgTaskList->pid == pid)
@@ -665,19 +723,20 @@ void sh_handle_child_signal(int signum)
         if (p == NULL)
         {
           // 未找到匹配的节点
-          printf("Error: Failed to find the matching background task.\n");
+          // printf("%s", error_message);
+          // fflush(stdout);
         }
       }
     }
     else if (WIFSIGNALED(status))
     {
-      //printf("Child process %d terminated by signal %d\n", pid, WTERMSIG(status));
+      // printf("Child process %d terminated by signal %d\n", pid, WTERMSIG(status));
 
       // 更新任务状态、从链表中移除任务
 
       if (bgTaskList == NULL)
       {
-        //printf("Error: Background task list is empty.\n");
+        // printf("Error: Background task list is empty.\n");
         ;
       }
       else if (bgTaskList->pid == pid)
@@ -701,8 +760,9 @@ void sh_handle_child_signal(int signum)
 
         if (p == NULL)
         {
-          // 未找到匹配的节点
-          printf("Error: Failed to find the matching background task.\n");
+          // // 未找到匹配的节点
+          // printf("%s", error_message);
+          // fflush(stdout);
         }
       }
     }
@@ -718,14 +778,22 @@ void main()
 {
   sh_banner();
   sh_register_signal_handler();
+  char *input = NULL;
+  // char input[BUFFER_SIZE];
+  size_t len = 0;
   while (1)
   {
     sh_prompt();
-    char input[BUFFER_SIZE];
-    fgets(input, BUFFER_SIZE, stdin);
+
+    // fgets(input, BUFFER_SIZE, stdin);
+    ssize_t read = getline(&input, &len, stdin);
+    if (read == -1)
+    {
+      break; // 读取错误，直接退出循环
+    }
     sh_make_token(input);
     sh_handle_cmd(0, nr_token - 1);
   }
-
+  free(input);
   return;
 }
