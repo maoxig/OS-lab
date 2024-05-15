@@ -1,4 +1,5 @@
 from typing import List
+import sys
 
 
 class DMA:
@@ -13,13 +14,13 @@ class DMA:
     def malloc(self, id: int, size: int, value: list) -> bool:
         if id in self.allocations:  # 这里的检查可以考虑删去
             return False
-        if size > self.free_size:#一旦空闲大于需求，必须分配
+        if size > self.free_size:  # 一旦空闲大于需求，必须分配
             return False
         else:
             start = self.find_free_space(size)
-            if start is None:
-                self.compact()# 确保整理后的大小能够继续分配
-            start = self.find_free_space(size)
+            if start == -1:
+                self.compact()  # 确保整理后的大小能够继续分配
+                start = self.find_free_space(size)
             self.allocate_memory(id, start, size, value)
             self.free_size = self.free_size - size
             return True
@@ -30,13 +31,13 @@ class DMA:
             return False
 
         allocation = self.allocations[id]
-        start = allocation['start']
-        size = allocation['size']
+        start = allocation["start"]
+        size = allocation["size"]
         self.free_size = self.free_size + size
         self.free_memory(start, size)
         del self.allocations[id]
         return True
-        
+
     def data(self) -> dict:
         return self.allocations
 
@@ -47,16 +48,18 @@ class DMA:
         if not free_spaces:
             return
 
-        sorted_allocations = sorted(self.allocations.items(), key=lambda x: x[1]['start'])
-        new_heap = ['#'] * len(self.heap)
+        sorted_allocations = sorted(
+            self.allocations.items(), key=lambda x: x[1]["start"]
+        )
+        new_heap = ["#"] * len(self.heap)
         new_allocations = {}
 
         current_start = 0
         for id, allocation in sorted_allocations:
-            size = allocation['size']
-            value = allocation['value']
+            size = allocation["size"]
+            value = allocation["value"]
             new_start = current_start
-            new_allocations[id] = {'start': new_start, 'size': size, 'value': value}
+            new_allocations[id] = {"start": new_start, "size": size, "value": value}
 
             for i in range(size):
                 new_heap[new_start + i] = value[i]
@@ -65,29 +68,32 @@ class DMA:
 
         self.heap = new_heap
         self.allocations = new_allocations
-    
 
     def find_free_space(self, size: int) -> int:
         """
-        查找指定大小的空间，只查找
+        查找指定大小的空间，只查找，目前采用最佳适应
         """
-        for i in range(len(self.heap) - size + 1):
-            if self.heap[i:i+size] == ['#'] * size:
-                return i
-        return None
-
+        free_spaces = self.get_free_spaces()
+        if not free_spaces:
+            return -1
+        best_start = -1
+        best_size = sys.maxsize
+        for start, free_size in free_spaces:
+            if size <= free_size and size < best_size:
+                best_size = size
+                best_start = start
+        return best_start
 
     def allocate_memory(self, id: int, start: int, size: int, value: list) -> None:
         """分配指定段内存，只分配"""
-        self.allocations[id] = {'start': start, 'size': size, 'value': value}
+        self.allocations[id] = {"start": start, "size": size, "value": value}
         for i in range(size):
             self.heap[start + i] = value[i]
 
     def free_memory(self, start: int, size: int):
         """释放指定段内存，只释放"""
         for i in range(size):
-            self.heap[start + i] = '#'
-
+            self.heap[start + i] = "#"
 
     def get_free_spaces(self):
         """获取空闲空间大小"""
@@ -109,6 +115,8 @@ class DMA:
 
         return free_spaces
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     from test import main
+
     main()
