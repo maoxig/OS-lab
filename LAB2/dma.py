@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict, Tuple
 import sys
 
 
@@ -7,8 +7,9 @@ class DMA:
         # 假设初始化时空间中每个地址都存储一个 # 符号
         self.heap: List[str] = ["#"] * size
         # 你可以在这里额外定义需要的数据结构
-        self.allocations: dict = {}
+        self.allocations: Dict[int, Dict[str, int]] = {}
         self.free_size: int = size
+        self.free_spaces: List[Tuple[int, int]] = [(0, size)]
 
     # 你需要实现以下三个 API
     def malloc(self, id: int, size: int, value: list) -> bool:
@@ -22,6 +23,7 @@ class DMA:
                 self.compact()  # 确保整理后的大小能够继续分配
                 start = self.find_free_space(size)
             self.allocate_memory(id, start, size, value)
+
             self.free_size = self.free_size - size
             return True
 
@@ -34,6 +36,7 @@ class DMA:
         start = allocation["start"]
         size = allocation["size"]
         self.free_size = self.free_size + size
+
         self.free_memory(start, size)
         del self.allocations[id]
         return True
@@ -71,7 +74,7 @@ class DMA:
 
     def find_free_space(self, size: int) -> int:
         """
-        查找指定大小的空间，只查找，目前采用最佳适应
+        查找指定大小的空间，只查找，目前采用最佳适应，查找失败时返回-1
         """
         free_spaces = self.get_free_spaces()
         if not free_spaces:
