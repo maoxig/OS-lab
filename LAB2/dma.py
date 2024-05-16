@@ -9,7 +9,6 @@ class DMA:
         # 你可以在这里额外定义需要的数据结构
         self.allocations: Dict[int, Dict[str, int]] = {}
         self.free_size: int = size
-        self.free_spaces: List[Tuple[int, int]] = [(0, size)]
 
     # 你需要实现以下三个 API
     def malloc(self, id: int, size: int, value: list) -> bool:
@@ -21,7 +20,7 @@ class DMA:
             start = self.find_free_space(size)
             if start == -1:
                 self.compact()  # 确保整理后的大小能够继续分配
-                start = self.find_free_space(size)
+                start = len(self.heap) - self.free_size
             self.allocate_memory(id, start, size, value)
 
             self.free_size = self.free_size - size
@@ -72,31 +71,44 @@ class DMA:
         self.heap = new_heap
         self.allocations = new_allocations
 
+
     def find_free_space(self, size: int) -> int:
         """
-        查找指定大小的空间，只查找，目前采用最佳适应，查找失败时返回-1
+        查找最佳适应指定大小的空间，只查找，查找失败时返回-1
         """
         free_spaces = self.get_free_spaces()
         if not free_spaces:
             return -1
-        best_start = -1
-        best_size = sys.maxsize
+
+        # 初始化最佳匹配的起始地址和大小
+        best_match_start = -1
+        best_match_size = float("inf")
+
+        # 遍历空闲空间列表，找到大小至少为size的最小空闲块
         for start, free_size in free_spaces:
-            if size <= free_size and size < best_size:
-                best_size = size
-                best_start = start
-        return best_start
+            if free_size >= size and free_size < best_match_size:
+                best_match_start = start
+                best_match_size = free_size
+
+        # 如果找到了最佳匹配的空闲块，返回其起始地址
+        if best_match_start != -1:
+            return best_match_start
+
+        # 如果没有找到足够大的空闲块，返回-1
+        return -1
 
     def allocate_memory(self, id: int, start: int, size: int, value: list) -> None:
         """分配指定段内存，只分配"""
         self.allocations[id] = {"start": start, "size": size, "value": value}
-        for i in range(size):
-            self.heap[start + i] = value[i]
+        # for i in range(size):
+        #     self.heap[start + i] = value[i]
+        self.heap[start : start + size] = value
 
     def free_memory(self, start: int, size: int):
         """释放指定段内存，只释放"""
-        for i in range(size):
-            self.heap[start + i] = "#"
+        self.heap[start : start + size] = ["#"] * size
+        # for i in range(size):
+        #     self.heap[start + i] = "#"
 
     def get_free_spaces(self):
         """获取空闲空间大小"""

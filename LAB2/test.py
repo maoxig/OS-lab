@@ -62,6 +62,7 @@ def main():
         workload = workloads[f"workload{i+1}"]
         execute_workload(workload, 10)
 
-
+# 使用cProfile来分析main函数
 if __name__ == "__main__":
-    main()
+    import cProfile
+    cProfile.run("main()", sort="cumtime")
