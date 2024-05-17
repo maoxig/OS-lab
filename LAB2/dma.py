@@ -1,108 +1,147 @@
 from typing import List, Dict, Tuple
+
 import sys
+
+
+class FreeBlock:
+    def __init__(self, start: int, size: int):
+        self.start = start
+        self.size = size
+        self.next = None
+        self.prev = None
 
 
 class DMA:
     def __init__(self, size):
-        # 假设初始化时空间中每个地址都存储一个 # 符号
         self.heap: List[str] = ["#"] * size
-        # 你可以在这里额外定义需要的数据结构
         self.allocations: Dict[int, Dict[str, int]] = {}
-        self.free_size: int = size
+        self.free_block_list = FreeBlock(0, size)
+        self.free_size = size
 
-    # 你需要实现以下三个 API
     def malloc(self, id: int, size: int, value: list) -> bool:
-        if id in self.allocations:  # 这里的检查可以考虑删去
+        if id in self.allocations:
             return False
-        if size > self.free_size:  # 一旦空闲大于需求，必须分配
+
+        if size > self.free_size:  # 如果空闲空间不够，尝试整理碎片
             return False
         else:
-            start = self.find_free_space(size)
-            if start == -1:
-                self.compact()  # 确保整理后的大小能够继续分配
-                start = len(self.heap) - self.free_size
-            self.allocate_memory(id, start, size, value)
+            block = self.find_best_fit_block(size)
+            if block is None:
+                self.compact()
 
-            self.free_size = self.free_size - size
+            block = self.find_best_fit_block(size)
+            self.allocate_block(id, block, size, value)
+            self.free_size -= size
             return True
 
     def free(self, id: int) -> bool:
-        """释放指定id的空间段"""
         if id not in self.allocations:
             return False
 
-        allocation = self.allocations[id]
+        allocation = self.allocations.pop(id)
         start = allocation["start"]
         size = allocation["size"]
-        self.free_size = self.free_size + size
-
-        self.free_memory(start, size)
-        del self.allocations[id]
+        self.free_block(start, size)
+        self.free_size += size
         return True
 
     def data(self) -> dict:
         return self.allocations
 
-    # 除了上述 API 外，你可以额外定义必要的辅助函数
-    # 例如，通过调用 compact 来对内存空间进行碎片整理
+    def find_best_fit_block(self, size: int) -> FreeBlock:
+        best_block = None
+        best_block_size = sys.maxsize
+        current_block = self.free_block_list.next
+
+        while current_block is not None:
+            if current_block.size >= size and current_block.size < best_block_size:
+                best_block = current_block
+                best_block_size = current_block.size
+            current_block = current_block.next
+
+        return best_block
+
+    def allocate_block(self, id: int, block: FreeBlock, size: int, value: list):
+        start = block.start
+        self.allocations[id] = {"start": start, "size": size, "value": value}
+        self.heap[start : start + size] = value
+
+        if block.size == size:
+            self.remove_free_block(block)
+        else:
+            block.start += size
+            block.size -= size
+
+    def free_block(self, start: int, size: int):
+        self.heap[start : start + size] = ["#"] * size
+        self.insert_free_block(start, size)
+
+    def insert_free_block(self, start: int, size: int):
+        new_block = FreeBlock(start, size)
+        prev_block = self.find_previous_block(start)
+        next_block = prev_block.next
+
+        new_block.prev = prev_block
+        new_block.next = next_block
+
+        if next_block:
+            next_block.prev = new_block
+        prev_block.next = new_block
+
+        self.merge_adjacent_blocks(new_block)
+
+    def find_previous_block(self, start: int) -> FreeBlock:
+        current_block = self.free_block_list
+        while current_block.next and current_block.next.start <= start:
+            current_block = current_block.next
+        return current_block
+
     def compact(self) -> None:
-        free_spaces = self.get_free_spaces()
-        if not free_spaces:
-            return
-
-        sorted_allocations = sorted(
-            self.allocations.items(), key=lambda x: x[1]["start"]
-        )
-        new_heap = ["#"] * len(self.heap)
-        new_allocations = {}
-
-        current_start = 0
-        for id, allocation in sorted_allocations:
+        # 记录新的空闲块开始位置
+        new_free_block_start = 0
+        # 遍历所有已分配的块，并将它们移动到堆的开始处
+        for id, allocation in sorted(
+            self.allocations.items(), key=lambda item: item[1]["start"]
+        ):
+            start = allocation["start"]
             size = allocation["size"]
             value = allocation["value"]
-            new_start = current_start
-            new_allocations[id] = {"start": new_start, "size": size, "value": value}
+            # 只有当当前块不在正确的位置时才移动
+            if start != new_free_block_start:
+                self.heap[new_free_block_start : new_free_block_start + size] = value
+                # 更新块的起始地址
+                self.allocations[id]["start"] = new_free_block_start
+            new_free_block_start += size
 
-            for i in range(size):
-                new_heap[new_start + i] = value[i]
+        # 清空剩余的堆空间作为新的空闲块
+        self.free_memory(new_free_block_start, len(self.heap) - new_free_block_start)
+        # 重新设置空闲块列表
+        self.free_block_list = FreeBlock(0, new_free_block_start)
+        self.free_block_list.next = FreeBlock(
+            new_free_block_start, len(self.heap) - new_free_block_start
+        )
+        self.free_block_list.next.prev = self.free_block_list
 
-            current_start += size
+    def remove_free_block(self, block: FreeBlock):
+        if block.prev:
+            block.prev.next = block.next
+        if block.next:
+            block.next.prev = block.prev
+        if block == self.free_block_list.next:
+            self.free_block_list.next = block.next
+        if block == self.free_block_list.prev:
+            self.free_block_list.prev = block.prev
 
-        self.heap = new_heap
-        self.allocations = new_allocations
+    def merge_adjacent_blocks(self, block: FreeBlock):
+        if block.next and block.next.start == block.start + block.size:
+            block.size += block.next.size
+            self.remove_free_block(block.next)
+            self.merge_adjacent_blocks(block)
 
-
-    def find_free_space(self, size: int) -> int:
-        """
-        查找最佳适应指定大小的空间，只查找，查找失败时返回-1
-        """
-        free_spaces = self.get_free_spaces()
-        if not free_spaces:
-            return -1
-
-        # 初始化最佳匹配的起始地址和大小
-        best_match_start = -1
-        best_match_size = float("inf")
-
-        # 遍历空闲空间列表，找到大小至少为size的最小空闲块
-        for start, free_size in free_spaces:
-            if free_size >= size and free_size < best_match_size:
-                best_match_start = start
-                best_match_size = free_size
-
-        # 如果找到了最佳匹配的空闲块，返回其起始地址
-        if best_match_start != -1:
-            return best_match_start
-
-        # 如果没有找到足够大的空闲块，返回-1
-        return -1
-
-    def allocate_memory(self, id: int, start: int, size: int, value: list) -> None:
-        """分配指定段内存，只分配"""
-        self.allocations[id] = {"start": start, "size": size, "value": value}
-        # for i in range(size):
-        #     self.heap[start + i] = value[i]
-        self.heap[start : start + size] = value
+        if block.prev and block.prev.start + block.prev.size == block.start:
+            block.prev.size += block.size
+            self.remove_free_block(block)
+            self.merge_adjacent_blocks(block.prev)
 
     def free_memory(self, start: int, size: int):
         """释放指定段内存，只释放"""
@@ -110,28 +149,36 @@ class DMA:
         # for i in range(size):
         #     self.heap[start + i] = "#"
 
-    def get_free_spaces(self):
-        """获取空闲空间大小"""
-        free_spaces = []
-        start = None
-        for i, char in enumerate(self.heap):
-            if char == "#":
-                if start is None:
-                    start = i
-            else:
-                if start is not None:
-                    size = i - start
-                    free_spaces.append((start, size))
-                    start = None
+    def realloc(self, old_id: int, new_size: int, new_value: list) -> bool:
+        if old_id not in self.allocations:
+            return False
 
-        if start is not None:
-            size = len(self.heap) - start
-            free_spaces.append((start, size))
+        old_allocation = self.allocations[old_id]
+        old_start = old_allocation["start"]
+        old_size = old_allocation["size"]
 
-        return free_spaces
+        if new_size <= old_size:
+            # 如果新大小小于等于旧大小，直接更新现有块
+            self.allocations[old_id]["value"] = new_value[:old_size]
+            self.heap[old_start : old_start + old_size] = new_value
+            return True
 
+        # 如果新大小大于旧大小，尝试在当前块的后面找到足够的空间
+        next_block = self.find_next_block(old_start + old_size)
+        if next_block and next_block.size >= (new_size - old_size):
+            # 如果下一个块足够大，扩展当前块
+            self.free_memory(next_block.start, next_block.size)
+            self.allocate_block(
+                old_id, next_block, new_size - old_size, new_value[old_size:]
+            )
+            self.allocations[old_id]["size"] = new_size
+            self.allocations[old_id]["value"] = new_value
+            return True
 
-if __name__ == "__main__":
-    from test import main
+        # 如果没有足够的空间，尝试整理碎片后重新分配
+        self.free_memory(old_start, old_size)
+        if self.malloc(old_id, new_size, new_value):
+            return True
 
-    main()
+        # 如果整理碎片后仍然没有足够的空间，返回失败
+        return False
