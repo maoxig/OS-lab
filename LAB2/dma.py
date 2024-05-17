@@ -149,36 +149,4 @@ class DMA:
         # for i in range(size):
         #     self.heap[start + i] = "#"
 
-    def realloc(self, old_id: int, new_size: int, new_value: list) -> bool:
-        if old_id not in self.allocations:
-            return False
 
-        old_allocation = self.allocations[old_id]
-        old_start = old_allocation["start"]
-        old_size = old_allocation["size"]
-
-        if new_size <= old_size:
-            # 如果新大小小于等于旧大小，直接更新现有块
-            self.allocations[old_id]["value"] = new_value[:old_size]
-            self.heap[old_start : old_start + old_size] = new_value
-            return True
-
-        # 如果新大小大于旧大小，尝试在当前块的后面找到足够的空间
-        next_block = self.find_next_block(old_start + old_size)
-        if next_block and next_block.size >= (new_size - old_size):
-            # 如果下一个块足够大，扩展当前块
-            self.free_memory(next_block.start, next_block.size)
-            self.allocate_block(
-                old_id, next_block, new_size - old_size, new_value[old_size:]
-            )
-            self.allocations[old_id]["size"] = new_size
-            self.allocations[old_id]["value"] = new_value
-            return True
-
-        # 如果没有足够的空间，尝试整理碎片后重新分配
-        self.free_memory(old_start, old_size)
-        if self.malloc(old_id, new_size, new_value):
-            return True
-
-        # 如果整理碎片后仍然没有足够的空间，返回失败
-        return False
