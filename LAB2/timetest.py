@@ -1,31 +1,16 @@
 import timeit
 
-# 定义两个列表
-list1 = [1, 2, 3]
-list2 = [4, 5, 6]
+# 创建一个包含大量键值对的字典
+dictionary = {f"key_{i}": i for i in range(1000000)}
 
+# 测试使用 .items() 遍历字典的时间
+items_time = timeit.timeit(lambda: [item for item in dictionary.items()], number=100)
 
-# 定义两个测试函数
-def test_extend():
-    result = list1.copy()
-    result.extend(list2)
-
-
-def test_plus_equal():
-    result = list1.copy()
-    result += list2
-
-
-# 创建两个timeit.Timer对象
-plus_equal_timer = timeit.Timer(test_plus_equal)
-extend_timer = timeit.Timer(test_extend)
-
-
-# 执行测试
-plus_equal_time = plus_equal_timer.timeit(number=1000000)
-extend_time = extend_timer.timeit(number=1000000)
-
+# 测试使用 .values() 遍历字典的时间
+values_time = timeit.timeit(
+    lambda: [value for value in dictionary.values()], number=100
+)
 
 # 输出结果
-print(f"使用 '+=' 运算符连接列表的时间: {plus_equal_time:.6f} 秒")
-print(f"使用 'extend' 连接列表的时间: {extend_time:.6f} 秒")
+print(f"Using .items() time: {items_time} seconds")
+print(f"Using .values() time: {values_time} seconds")

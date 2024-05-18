@@ -27,7 +27,7 @@ class DMA:
         self.free_space_start -= old_size
         del self.heap[old_start : old_start + old_size]
         self.heap += ["#"] * old_size
-        for id, allocation in reversed(self.allocations.items()):
+        for allocation in reversed(self.allocations.values()):
             if allocation["start"] > old_start:
                 allocation["start"] -= old_size
             else:
@@ -36,3 +36,4 @@ class DMA:
 
     def data(self):
         return self.allocations
+
