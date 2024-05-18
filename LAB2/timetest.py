@@ -1,21 +1,31 @@
-import time
+import timeit
 
-# 创建一个大型列表
-list_size = 1000000
-test_list = list(range(list_size))
+# 定义两个列表
+list1 = [1, 2, 3]
+list2 = [4, 5, 6]
 
-# 直接遍历列表
-start_time = time.time()
-for item in test_list:
-    _ = item
-direct_iter_time = time.time() - start_time
 
-# 使用enumerate遍历列表
-start_time = time.time()
-for index, item in enumerate(test_list):
-    _ = index, item
-enumerate_time = time.time() - start_time
+# 定义两个测试函数
+def test_extend():
+    result = list1.copy()
+    result.extend(list2)
+
+
+def test_plus_equal():
+    result = list1.copy()
+    result += list2
+
+
+# 创建两个timeit.Timer对象
+plus_equal_timer = timeit.Timer(test_plus_equal)
+extend_timer = timeit.Timer(test_extend)
+
+
+# 执行测试
+plus_equal_time = plus_equal_timer.timeit(number=1000000)
+extend_time = extend_timer.timeit(number=1000000)
+
 
 # 输出结果
-print(f"直接遍历列表所需时间: {direct_iter_time:.6f} 秒")
-print(f"使用enumerate遍历列表所需时间: {enumerate_time:.6f} 秒")
+print(f"使用 '+=' 运算符连接列表的时间: {plus_equal_time:.6f} 秒")
+print(f"使用 'extend' 连接列表的时间: {extend_time:.6f} 秒")
