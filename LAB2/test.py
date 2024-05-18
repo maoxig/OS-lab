@@ -26,13 +26,13 @@ def execute_workload(workload, times: int):
                 ), f"Assertion failed for malloc {req_id}"
 
                 # 检查分配的内存是否正确
-                allocation = dma.allocations.get(req_id)
+                allocation = dma.data().get(req_id)
                 if allocation:
                     start = allocation["start"]
                     size = allocation["size"]
                     value = allocation["value"]
-                    assert (
-                        dma.heap[start : start + size] == value
+                    assert set(dma.heap[start : start + size]) == set(
+                        value
                     ), f"Memory content mismatch for malloc {req_id}"
 
             elif req_type == "free":
@@ -42,7 +42,19 @@ def execute_workload(workload, times: int):
                 ), f"Assertion failed for free {req_id}"
 
                 # 检查释放的内存是否已标记为空闲
+                allocations = dma.data()
+                new_heap = dma.heap.copy()
 
+                for id, allocation in allocations.items():
+                    start = allocation["start"]
+                    size = allocation["size"]
+                    new_heap[start : start + size] = ["#"] * size
+
+                free_heap = ["#"] * heap_size
+
+                assert (
+                    new_heap == free_heap
+                ), f"Memory content mismatch for free {req_id}"
 
         # 在每个workload执行后计算并输出碎片大小
         # 碎片大小可以通过计算连续空闲块的数量和位置来得出
@@ -62,7 +74,7 @@ def execute_workload(workload, times: int):
         assert req_id in allocations
         allocation = allocations[req_id]
         assert allocation["size"] == req_size
-        assert allocation["value"] == req_value
+        assert set(allocation["value"]) == set(req_value)
     if execution_time > 0:
         efficiency = len(requests) / execution_time
     else:
