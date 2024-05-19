@@ -1,21 +1,23 @@
 class DMA:
-    __slots__ = ["heap", "allocations", "heap_size", "free_space_start","offsets"]
+    __slots__ = ["heap", "allocations", "free_size", "free_space_start"]
 
     def __init__(self, size):
         self.heap = ["#"] * size
         self.allocations = {}
-        self.heap_size = size
+        self.free_size = size
         self.free_space_start = 0
-        self.offsets = []
 
     def malloc(self, id, size, value):
-
-        if size > self.heap_size - self.free_space_start:
+        if size > self.free_size:
             return False
-        start = self.free_space_start
-        self.allocations[id] = {"start": start, "size": size, "value": value}
-        self.heap[start : start + size] = value
+
+        self.heap = value + self.heap
+        del self.heap[self.free_size :]
+        self.free_size -= size
         self.free_space_start += size
+        for allocation in self.allocations.values():
+            allocation["start"] += size
+        self.allocations[id] = {"start": 0, "size": size, "value": value}
         return True
 
     def free(self, id):
@@ -24,20 +26,16 @@ class DMA:
         allocation = self.allocations.pop(id)
         old_start = allocation["start"]
         old_size = allocation["size"]
-
+        self.free_size += old_size
         self.free_space_start -= old_size
         del self.heap[old_start : old_start + old_size]
         self.heap += ["#"] * old_size
-        self.offsets.append((old_start, old_size))
+        for allocation in self.allocations.values():
+            if allocation["start"] > old_start:
+                allocation["start"] -= old_size
+            else:
+                break
         return True
 
     def data(self):
-
-        for old_start, old_size in self.offsets:
-            for allocation in reversed(self.allocations.values()):
-                if allocation["start"] > old_start:
-                    allocation["start"] -= old_size
-                else:
-                    break
-            self.offsets.pop(0)
         return self.allocations
