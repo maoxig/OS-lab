@@ -93,7 +93,7 @@ def main():
     for i in range(len(workloads)):
         print("Executing workload #{}".format(i + 1))
         workload = workloads[f"workload{i+1}"]
-        execute_workload(workload, 100)
+        execute_workload(workload, 200)
 
 
 # 使用cProfile来分析main函数

@@ -1,44 +1,50 @@
 import timeit
+import numpy as np
+from array import array
 
-# 创建一个包含大量元素的字典
-dict_size = 100000
-test_dict = {f"key_{i}": i for i in range(dict_size)}
+# 创建一个包含1000个元素的NumPy数组、列表和array数组
+size = 1000
+np_arr = np.arange(size)
+lst = list(range(size))
+arr = array("i", range(size))
 
-
-# 定义不同的查询方式
-def direct_access(dict_obj, key):
-    return dict_obj[key]
-
-
-def get_method(dict_obj, key):
-    return dict_obj.get(key)
-
-
-def in_operator(dict_obj, key):
-    return key in dict_obj
+# 设置测试参数
+offset = 10  # 偏移量
+index = size // 2  # 从中间开始
 
 
-def items_iteration(dict_obj, key):
-    for k, v in dict_obj.items():
-        if k == key:
-            return v
-    return None
+# 定义一个函数来使用NumPy将指定索引之后的数都添加offset，并转换成列表
+def modify_with_numpy_and_convert(arr, index, offset):
+    arr[index:] += offset
+    return arr.tolist()
 
 
-# 创建不同的测试语句
-direct_access_stmt = f"direct_access(test_dict, 'key_99999')"
-get_method_stmt = f"get_method(test_dict, 'key_99999')"
-in_operator_stmt = f"in_operator(test_dict, 'key_99999')"
-items_iteration_stmt = f"items_iteration(test_dict, 'key_99999')"
+# 定义一个函数来不使用NumPy将指定索引之后的数都添加offset，并转换成列表
+def modify_with_list_and_convert(lst, index, offset):
+    lst[index:] = [x + offset for x in lst[index:]]
+    return lst
 
-# 运行基准测试
-print(
-    "Direct Access: ",
-    timeit.timeit(direct_access_stmt, globals=globals(), number=10000),
+
+
+
+# 创建timeit的Timer对象来进行基准测试
+numpy_convert_timer = timeit.Timer(
+    lambda: modify_with_numpy_and_convert(np_arr.copy(), index, offset)
 )
-print("Get Method: ", timeit.timeit(get_method_stmt, globals=globals(), number=10000))
-print("In Operator: ", timeit.timeit(in_operator_stmt, globals=globals(), number=10000))
+list_convert_timer = timeit.Timer(
+    lambda: modify_with_list_and_convert(lst.copy(), index, offset)
+)
+
+
+# 进行基准测试，重复3次，每次运行1000次
+numpy_convert_time = numpy_convert_timer.timeit(number=1000)
+list_convert_time = list_convert_timer.timeit(number=1000)
+
+
+# 输出结果
 print(
-    "Items Iteration: ",
-    timeit.timeit(items_iteration_stmt, globals=globals(), number=10000),
+    f"使用NumPy将指定索引之后的数都添加offset，并转换成列表时间: {numpy_convert_time} 秒"
+)
+print(
+    f"使用Python列表将指定索引之后的数都添加offset，并转换成列表时间: {list_convert_time} 秒"
 )
