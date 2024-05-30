@@ -47,21 +47,28 @@ void *simulate_life_thread(void *args)
         // 使用互斥锁和条件变量来同步线程
         pthread_mutex_lock(&mutex);
         threads_done++;
+
+        // 检查是否所有线程都完成了这一轮迭代
         if (threads_done == num_threads)
         {
-            threads_done = 0;
-            swap(state, next_state);
+            threads_done = 0;              // 重置计数器
+            swap(state, next_state);       // 交换当前状态和下一状态
             pthread_cond_broadcast(&cond); // 唤醒所有等待的线程
         }
         else
         {
-            pthread_cond_wait(&cond, &mutex); // 等待其他线程完成
+            while (threads_done < num_threads)
+            {
+                pthread_cond_wait(&cond, &mutex); // 等待其他线程完成
+            }
         }
+
         pthread_mutex_unlock(&mutex);
     }
 
     pthread_exit(NULL);
 }
+
 void simulate_life_parallel(int num_threads, LifeBoard *state, int steps)
 {
     if (steps == 0)
