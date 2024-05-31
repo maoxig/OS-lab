@@ -49,7 +49,7 @@ void *simulate_life_thread(void *args)
         threads_done++;
 
         // 检查是否所有线程都完成了这一轮迭代
-        if (threads_done >= total_num_threads)
+        if (threads_done == total_num_threads)
         {
             threads_done = 0; // 重置计数器
             swap(state, next_state); // 交换当前状态和下一状态
