@@ -1,4 +1,4 @@
-CC=gcc-10
+CC=gcc
 CFLAGS=-std=gnu11 -g -O3 -pthread -Wall -Werror -pedantic
 # ASAN = Address SANitizer
 CFLAGS_ASAN=-std=gnu11 -g -Og -pthread -fsanitize=address -Wall -Werror -pedantic
