@@ -5,6 +5,11 @@ __pycache__/
 
 # C extensions
 *.so
+# 忽略子目录下所有的.o文件
+
+output
+*.o
+
 
 # Distribution / packaging
 .Python
