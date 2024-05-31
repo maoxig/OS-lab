@@ -5,7 +5,8 @@
 // 全局变量
 pthread_mutex_t mutex; // 互斥锁
 pthread_cond_t cond;   // 条件变量
-int threads_done;      // 记录已完成任务的线程数
+int threads_done = 0;      // 记录已完成任务的线程数
+int total_num_threads;
 
 // 线程结构体，用于传递参数
 typedef struct
@@ -14,7 +15,7 @@ typedef struct
     LifeBoard *next_state;
     int thread_id;
     int steps;
-    int num_threads;
+
 } ThreadArgs;
 void *simulate_life_thread(void *args)
 {
@@ -23,17 +24,16 @@ void *simulate_life_thread(void *args)
     LifeBoard *next_state = thread_args->next_state;
     int thread_id = thread_args->thread_id;
     int steps = thread_args->steps;
-    int num_threads = thread_args->num_threads;
     int width = state->width;
     int height = state->height;
-    int chunk_size = height / num_threads;
+    int chunk_size = (height - 2) / total_num_threads;
 
     int start_row = thread_id * chunk_size;
-    int end_row = (thread_id == num_threads - 1) ? height - 1 : (thread_id + 1) * chunk_size;
-
+    int end_row = (thread_id == total_num_threads - 1) ? height - 2 : (thread_id + 1) * chunk_size;
+    //printf("id:%d,start_row:%d,end_row:%d\n", thread_id, start_row, end_row);
     for (int step = 0; step < steps; step++)
     {
-        for (int y = start_row + 1; y < end_row - 1; y++)
+        for (int y = start_row + 1; y < end_row+1; y++)
         {
             for (int x = 1; x < width - 1; x++)
             {
@@ -49,21 +49,23 @@ void *simulate_life_thread(void *args)
         threads_done++;
 
         // 检查是否所有线程都完成了这一轮迭代
-        if (threads_done == num_threads)
+        if (threads_done >= total_num_threads)
         {
-            threads_done = 0;              // 重置计数器
-            swap(state, next_state);       // 交换当前状态和下一状态
+            threads_done = 0; // 重置计数器
+            swap(state, next_state); // 交换当前状态和下一状态
             pthread_cond_broadcast(&cond); // 唤醒所有等待的线程
+            
         }
         else
         {
-            while (threads_done < num_threads)
-            {
-                pthread_cond_wait(&cond, &mutex); // 等待其他线程完成
-            }
+            // 等待其他线程完成
+            //while (threads_done < total_num_threads)
+            pthread_cond_wait(&cond, &mutex);
+            
         }
-
+        
         pthread_mutex_unlock(&mutex);
+        
     }
 
     pthread_exit(NULL);
@@ -88,7 +90,7 @@ void simulate_life_parallel(int num_threads, LifeBoard *state, int steps)
     pthread_mutex_init(&mutex, NULL);
     pthread_cond_init(&cond, NULL);
     threads_done = 0;
-
+    total_num_threads = num_threads;
     // 创建并启动线程
     for (int i = 0; i < num_threads; i++)
     {
@@ -96,7 +98,6 @@ void simulate_life_parallel(int num_threads, LifeBoard *state, int steps)
         thread_args[i].next_state = next_state;
         thread_args[i].thread_id = i;
         thread_args[i].steps = steps;
-        thread_args[i].num_threads = num_threads;
         pthread_create(&threads[i], NULL, simulate_life_thread, &thread_args[i]);
     }
 
