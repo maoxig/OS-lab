@@ -30,17 +30,27 @@ void *simulate_life_thread(void *args)
 
     int start_row = thread_id * chunk_size;
     int end_row = (thread_id == total_num_threads - 1) ? height - 2 : (thread_id + 1) * chunk_size;
-    //printf("id:%d,start_row:%d,end_row:%d\n", thread_id, start_row, end_row);
+
     for (int step = 0; step < steps; step++)
     {
-        for (int y = start_row + 1; y < end_row+1; y++)
+        for (int y = start_row + 1; y < end_row + 1; y++)
         {
             for (int x = 1; x < width - 1; x++)
-            {
-                int live_neighbors = count_live_neighbors(state, x, y);
-                LifeCell current_cell = at(state, x, y);
+            {   
+
+                int live_neighbors = 0;
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        int nx = x + dx, ny = y + dy;
+                        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                            live_neighbors += state->cells[ny * width + nx];
+                        }
+                    }
+                }
+                //int live_neighbors = count_live_neighbors(state, x, y);
+                LifeCell current_cell = state->cells[y * state->width + x];//LifeCell current_cell = at(state, x, y);
                 LifeCell new_cell = (live_neighbors == 3) || (live_neighbors == 4 && current_cell == 1) ? 1 : 0;
-                set_at(next_state, x, y, new_cell);
+                next_state->cells[y * next_state->width + x] = new_cell; //set_at(next_state, x, y, new_cell);
             }
         }
 
@@ -52,7 +62,10 @@ void *simulate_life_thread(void *args)
         if (threads_done == total_num_threads)
         {
             threads_done = 0; // 重置计数器
-            swap(state, next_state); // 交换当前状态和下一状态
+            //swap(state, next_state); // 交换当前状态和下一状态
+            LifeCell *temp = state->cells;
+            state->cells = next_state->cells;
+            next_state->cells = temp;
             pthread_cond_broadcast(&cond); // 唤醒所有等待的线程
             
         }
