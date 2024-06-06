@@ -30,7 +30,7 @@ for FILE in "$INPUT_DIR"/*; do
     if [ "$DIFF" != "" ]; then
         echo "Outputs for $BASENAME are different."
         echo "Difference:"
-        echo "$DIFF"
+        #echo "$DIFF"
     else
         echo "Outputs for $BASENAME are the same."
         # 计算加速百分比

@@ -7,12 +7,26 @@ pthread_mutex_t mutex; // 互斥锁
 pthread_cond_t cond;   // 条件变量
 int threads_done = 0;      // 记录已完成任务的线程数
 int total_num_threads;
+LifeBoard *global_state;
+LifeBoard *next_state;
+static inline LifeCell inline_at(const LifeBoard* board, int x, int y) {
+    return board->cells[y * board->width + x];
+}
+static inline void inline_set_at(LifeBoard* board, int x, int y, LifeCell value) {
+    board->cells[y * board->width + x] = value;
+}
+static inline void inline_swap(LifeBoard* first, LifeBoard* second) {
+    if (first == NULL || second == NULL) return;
+    // 仅交换cells指针
+    LifeCell *temp = first->cells;
+    first->cells = second->cells;
+    second->cells = temp;
+}
 
 // 线程结构体，用于传递参数
 typedef struct
 {
-    LifeBoard *state;
-    LifeBoard *next_state;
+
     int thread_id;
     int steps;
 
@@ -20,12 +34,11 @@ typedef struct
 void *simulate_life_thread(void *args)
 {
     ThreadArgs *thread_args = (ThreadArgs *)args;
-    LifeBoard *state = thread_args->state;
-    LifeBoard *next_state = thread_args->next_state;
+
     int thread_id = thread_args->thread_id;
     int steps = thread_args->steps;
-    int width = state->width;
-    int height = state->height;
+    int width = global_state->width;
+    int height = global_state->height;
     int chunk_size = (height - 2) / total_num_threads;
 
     int start_row = thread_id * chunk_size;
@@ -33,14 +46,25 @@ void *simulate_life_thread(void *args)
     //printf("id:%d,start_row:%d,end_row:%d\n", thread_id, start_row, end_row);
     for (int step = 0; step < steps; step++)
     {
+        
         for (int y = start_row + 1; y < end_row+1; y++)
         {
             for (int x = 1; x < width - 1; x++)
             {
-                int live_neighbors = count_live_neighbors(state, x, y);
-                LifeCell current_cell = at(state, x, y);
+                int live_neighbors = 0;
+                live_neighbors += inline_at(global_state, x-1, y-1);
+                live_neighbors += inline_at(global_state, x-1, y);
+                live_neighbors += inline_at(global_state, x-1, y+1);
+                live_neighbors += inline_at(global_state, x, y-1);
+                live_neighbors += inline_at(global_state, x, y);
+                live_neighbors += inline_at(global_state, x, y+1);
+                live_neighbors += inline_at(global_state, x+1, y-1);
+                live_neighbors += inline_at(global_state, x+1, y);
+                live_neighbors += inline_at(global_state, x+1, y+1);
+
+                LifeCell current_cell = inline_at(global_state, x, y);
                 LifeCell new_cell = (live_neighbors == 3) || (live_neighbors == 4 && current_cell == 1) ? 1 : 0;
-                set_at(next_state, x, y, new_cell);
+                inline_set_at(next_state, x, y, new_cell);
             }
         }
 
@@ -52,7 +76,7 @@ void *simulate_life_thread(void *args)
         if (threads_done == total_num_threads)
         {
             threads_done = 0; // 重置计数器
-            swap(state, next_state); // 交换当前状态和下一状态
+            inline_swap(global_state, next_state); // 交换当前状态和下一状态
             pthread_cond_broadcast(&cond); // 唤醒所有等待的线程
             
         }
@@ -71,12 +95,13 @@ void *simulate_life_thread(void *args)
     pthread_exit(NULL);
 }
 
-void simulate_life_parallel(int num_threads, LifeBoard *state, int steps)
+void simulate_life_parallel(int num_threads, LifeBoard *current_state, int steps)
 {
     if (steps == 0)
         return;
+    global_state = current_state;
 
-    LifeBoard *next_state = create_life_board(state->width, state->height);
+    next_state = create_life_board(global_state->width, global_state->height);
     if (next_state == NULL)
     {
         fprintf(stderr, "Failed to allocate memory for next state.\n");
@@ -94,8 +119,7 @@ void simulate_life_parallel(int num_threads, LifeBoard *state, int steps)
     // 创建并启动线程
     for (int i = 0; i < num_threads; i++)
     {
-        thread_args[i].state = state;
-        thread_args[i].next_state = next_state;
+
         thread_args[i].thread_id = i;
         thread_args[i].steps = steps;
         pthread_create(&threads[i], NULL, simulate_life_thread, &thread_args[i]);

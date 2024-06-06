@@ -1,0 +1,4 @@
+curl -F "token=P1HGsNT3zFOIy282ohvV8g" -F "lab_num=3" -F "file=@life-parallel.c" http://114.212.81.7:9999/upload_code
+
+curl "http://114.212.81.7:9999/download?token=P1HGsNT3zFOIy282ohvV8g&lab_num=3"
+
