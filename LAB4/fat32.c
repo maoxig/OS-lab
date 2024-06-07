@@ -289,6 +289,9 @@ static int parse_path(const char *path, int *target_cluster ,int *size) {
 // 挂载磁盘镜像
 int fat_mount(const char *path)
 {
+    if (mounted==0){//重复挂载
+        return -1;
+    }
     // 只读模式打开磁盘镜像
     int fd = open(path, O_RDWR);
     if (fd < 0)
@@ -343,6 +346,13 @@ int fat_open(const char *path)
     // 解析路径，找到文件对应的起始簇号和大小
     int cluster, size;
     int result =parse_path(path, &cluster,&size);
+
+    struct DirEntry* dir_entry =(struct DirEntry *)get_cluster_data(cluster);
+    if ((dir_entry->DIR_Attr & DIRECTORY) != 0)//是一个目录
+    {
+        return -1;
+    }
+    
     if (result!=0) 
     {
         printf("path_parse failed!\n");
@@ -377,8 +387,21 @@ int fat_close(int fd)
 // 读取普通文件内容
 int fat_pread(int fd, void *buffer, int count, int offset)
 {
+    //在读取到文件末尾时，返回值可能会小于 count；
+    //如果输入参数 count 值为 0 或者 offset 超过了文件末尾，则应返回 0。
+    //对于其它读取失败的情况，返回 -1。
     if (fd < 0 || fd >= MAX_OPEN_FILES || open_files[fd].cluster == 0)
         return -1;
+     // 获取文件大小
+    int fileSize = open_files[fd].size;
+
+    // 当count为0或者offset超过文件末尾时返回0
+    if (count == 0 || offset >= fileSize)
+        return 0;
+
+    // 计算实际可读取的最大字节数
+    if (offset + count > fileSize)
+        count = fileSize - offset;
 
     // 计算读取的起始簇和偏移量
     int cluster = open_files[fd].cluster;
