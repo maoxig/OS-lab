@@ -36,7 +36,7 @@ struct Fat32BPB {
     uint16_t Signature_word; // 签名字，通常是 0xAA55
 } __attribute__((packed));
 
-// 目录项 (短文件名)
+// 目录项 (短文件名) 32bytes
 struct DirEntry {
     uint8_t DIR_Name[11]; // 文件名（8 字符）和扩展名（3 字符）
     uint8_t DIR_Attr; // 文件属性

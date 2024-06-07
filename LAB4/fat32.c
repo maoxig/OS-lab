@@ -14,11 +14,11 @@ static int find_in_directory(const char *filename, struct FilesInfo *dir_files);
 static void *get_cluster_data(int cluster);
 static int next_cluster(int cluster);
 static int first_cluster(int cluster);
-static void read_directory_entry(int dir_sector, int index, struct DirEntry *entry);
+static int read_directory_entry(int dir_sector, int index, struct DirEntry *entry);
 static int parse_path(const char *path, int *cluster ,int *size) ;
 struct Fat32BPB *hdr; // 指向 BPB 的数据
 int mounted = -1;     // 是否已挂载成功
-int date_region_start =0;
+
 // 定义打开文件表
 #define MAX_OPEN_FILES 128
 struct OpenFile
@@ -43,13 +43,14 @@ static void parse_directory_entries(void *cluster_data, struct FilesInfo *files_
         }
         if (entry->DIR_Name[0] != 0xE5 && (entry->DIR_Attr & LONG_NAME_MASK) != LONG_NAME) {
             // 不是删除的条目，也不是长文件名条目
+            printf(" entry_name: %s, entry_cluster:%d ,entry:%x\n",(char *)entry->DIR_Name,entry->DIR_FstClusHI<<16|entry->DIR_FstClusLO,entry);
             strncpy((char *)files_info->files[files_info->size].DIR_Name, (char *)entry->DIR_Name, 11);
             files_info->files[files_info->size].DIR_FileSize = entry->DIR_FileSize;
             files_info->size++;
         }
         entry++;
     }
-    printf("parse_directory_entries, files_info_size:%d\n",files_info->size);
+    printf("parse_directory_entries, files_info_size:%d",files_info->size);
 }
 // 辅助函数：读取目录内容
 static struct FilesInfo *read_directory(int cluster_number) {
@@ -66,6 +67,7 @@ static struct FilesInfo *read_directory(int cluster_number) {
     printf("try to read cluster data\n");
     while (cluster_number < 0x0FFFFFF8) { // 最后一个簇的标记
         cluster_data = get_cluster_data(cluster_number);
+        printf("cluster_data_addr:%x\n",(void*)cluster_data);
         if (!cluster_data) {
             // 读取簇数据失败
             free(cluster_data);
@@ -76,7 +78,7 @@ static struct FilesInfo *read_directory(int cluster_number) {
         }
         printf("succeed to read cluster data\n");
         parse_directory_entries(cluster_data, files_info);
-        
+        //printf("cluster_data_addr_new:%x\n",(void*)cluster_data);
         cluster_number = next_cluster(cluster_number);
     }
 
@@ -167,17 +169,57 @@ static int first_cluster(int cluster)
 }
 
 // 辅助函数：读取目录项
-static void read_directory_entry(int dir_sector, int index, struct DirEntry *entry) {
-    // 计算目录项在磁盘上的偏移量
-    int offset = index * sizeof(struct DirEntry);
+static int read_directory_entry(int dir_cluster, int logical_index, struct DirEntry *entry) {
+    // 每个簇可以容纳的目录项数量
+    int entries_per_cluster = (hdr->BPB_BytsPerSec * hdr->BPB_SecPerClus) / sizeof(struct DirEntry);
+    //printf("entries_per_cluster:%d\n",entries_per_cluster);
+    // 跟踪当前簇号和簇内的物理索引
+    int current_cluster = dir_cluster;
+    int physical_index = 0;
 
-    // 读取目录项数据
-    void *dir_data = get_cluster_data(dir_sector);
-    memcpy(entry, (char *)dir_data + offset, sizeof(struct DirEntry));
+    // 遍历簇链直到到达所需的逻辑索引
+    while (logical_index >= 0) {
+        // 读取当前簇的数据
+        void *dir_data = get_cluster_data(current_cluster);
+        if (!dir_data) {
+            // 无法获取簇数据，返回错误
+            return -1;
+        }
+
+        // 遍历簇内的目录项
+        for (int i = 0; i < entries_per_cluster; ++i) {
+            struct DirEntry *target_entry = (struct DirEntry *)((char *)dir_data + i * sizeof(struct DirEntry));
+
+            // 跳过删除的条目和长文件名条目
+            if (target_entry->DIR_Name[0] == 0xE5 || (target_entry->DIR_Attr & LONG_NAME_MASK)== LONG_NAME) {
+                continue;
+            }
+            printf("targe_entry:%x,i:%d\n",target_entry,i);
+            // 如果到达所需的逻辑索引，复制目录项数据并返回
+            if (physical_index == logical_index) {
+                memcpy(entry, target_entry, sizeof(struct DirEntry));
+                return 0; // 读取成功
+            }
+
+            // 否则，递增物理索引
+            physical_index++;
+        }
+
+        // 获取下一个簇的编号
+        int next_cluster_num = next_cluster(current_cluster);
+        if (next_cluster_num < 0 || next_cluster_num >= 0x0FFFFFF8) {
+            // 到达簇链的末尾或错误，返回错误
+            return -1;
+        }
+        current_cluster = next_cluster_num;
+    }
+
+    // 如果逻辑索引超出范围，返回错误
+    return -1;
 }
 
 // 路径解析函数
-static int parse_path(const char *path, int *cluster ,int *size) {
+static int parse_path(const char *path, int *target_cluster ,int *size) {
     // 根目录的簇号是 2
     int current_cluster = hdr->BPB_RootClus;// 2
 
@@ -186,6 +228,7 @@ static int parse_path(const char *path, int *cluster ,int *size) {
     if (!path_copy) return -1; // 内存分配失败
 
     struct FilesInfo *current_dir_files = read_directory(current_cluster);
+    printf("info addr:%x\n",(void*)current_dir_files);
     if (!current_dir_files) {
         free(path_copy);
         printf("current_dir_files is emptry\n");
@@ -204,12 +247,15 @@ static int parse_path(const char *path, int *cluster ,int *size) {
         }
 
         // 获取当前文件或目录的信息
-        struct DirEntry *dir_entry = &current_dir_files->files[file_index];
+        struct DirEntry *dir_entry=malloc(sizeof(struct DirEntry));
+        read_directory_entry(current_cluster,file_index,dir_entry);
+
 
         // 如果找到的是文件，则返回
         if ((dir_entry->DIR_Attr & DIRECTORY) == 0) { // 不是目录
             printf("is not a directory!\n");
-            *cluster = (dir_entry->DIR_FstClusHI << 16) | dir_entry->DIR_FstClusLO; //TODO
+            *target_cluster = (dir_entry->DIR_FstClusHI << 16) | dir_entry->DIR_FstClusLO; //TODO error cluster
+            printf("??cluster:%d\n",*target_cluster);
             *size = current_dir_files->files[file_index].DIR_FileSize;
             free(current_dir_files->files);
             free(current_dir_files);
@@ -235,7 +281,7 @@ static int parse_path(const char *path, int *cluster ,int *size) {
     free(current_dir_files);
     free(path_copy);
 
-    *cluster = current_cluster;
+    *target_cluster = current_cluster;
     return 0;
 }
 
@@ -270,9 +316,9 @@ int fat_mount(const char *path)
     assert(hdr->Signature_word == 0xaa55);                   // MBR 的最后两个字节应该是 0x55 和 0xaa
     assert(hdr->BPB_TotSec32 * hdr->BPB_BytsPerSec == size); // 不相等表明文件的 FAT32 文件系统参数可能不正确
     //Data Region Start = BPB_RsvdSecCnt + (BPB_NumFATs * BPB_FATSz32) + (BPB_RootEntCnt * sizeof(struct DirEntry))
-    date_region_start = hdr->BPB_RsvdSecCnt + (hdr->BPB_NumFATs *hdr->BPB_FATSz32)+ (hdr->BPB_rootEntCnt*sizeof(struct  DirEntry));
-    printf("data_region_start:%d\n",date_region_start);
-    printf("hdr addr:%x\n",(uint32_t)(void*)hdr);
+    //date_region_start = hdr->BPB_RsvdSecCnt + (hdr->BPB_NumFATs *hdr->BPB_FATSz32)+ (hdr->BPB_rootEntCnt*sizeof(struct  DirEntry));
+    
+    //printf("hdr addr:%x\n",(uint32_t)(void*)hdr);
     // 打印 BPB 的部分信息
     printf("Some of the information about BPB is as follows\n");
     printf("OEM-ID \"%s\", \n", hdr->BS_oemName);
