@@ -5,69 +5,69 @@
 
 // FAT32 文件系统中 BPB 的各个数据，具体含义请参照 FAT 规范
 struct Fat32BPB {
-    uint8_t BS_jmpBoot[3];
-    uint8_t BS_oemName[8];
-    uint16_t BPB_BytsPerSec;
-    uint8_t BPB_SecPerClus;
-    uint16_t BPB_RsvdSecCnt;
-    uint8_t BPB_NumFATs;
-    uint16_t BPB_rootEntCnt;
-    uint16_t BPB_totSec16;
-    uint8_t BPB_media;
-    uint16_t BPB_FATSz16;
-    uint16_t BPB_SecPerTrk;
-    uint16_t BPB_NumHeads;
-    uint32_t BPB_HiddSec;
-    uint32_t BPB_TotSec32;
-    uint32_t BPB_FATSz32;
-    uint16_t BPB_ExtFlags;
-    uint16_t BPB_FSVer;
-    uint32_t BPB_RootClus;
-    uint16_t BPB_FSInfo;
-    uint16_t BPB_bkBootSec;
-    uint8_t BPB_reserved[12];
-    uint8_t BS_DrvNum;
-    uint8_t BS_Reserved1;
-    uint8_t BS_BootSig;
-    uint32_t BS_VolID;
-    uint8_t BS_VolLab[11];
-    uint8_t BS_FileSysTye[8];
-    uint8_t  __padding_1[420];
-    uint16_t Signature_word;
+    uint8_t BS_jmpBoot[3]; // 跳转指令，用于启动扇区
+    uint8_t BS_oemName[8]; // OEM 名称，OEM 名称标识。可以通过 FAT 的实现设置为任何想要的值。通常这被标识为是什么系统格式化了该卷。
+    uint16_t BPB_BytsPerSec; // 每扇区的字节数,这个值通常只接受以下值：512, 1024, 2048 or 4096
+    uint8_t BPB_SecPerClus; // 每簇的扇区数,每个分配单元的扇区数。这个值必须是大于 0 的 2 的整数次方。合法值如下，1,2,4,8,16,32,64 和 128。
+    uint16_t BPB_RsvdSecCnt; // 从卷的第一个扇区开始的保留区域中的保留扇区数。
+    uint8_t BPB_NumFATs; // FAT 表的个数,通常推荐是 2, 即使 1 也是可以用的。
+    uint16_t BPB_rootEntCnt; // 根目录项数（对于 FAT32，这个值通常是 0）
+    uint16_t BPB_totSec16; // 16 位总扇区数（对于 FAT32，这个值通常是 0）
+    uint8_t BPB_media; // 媒体描述符
+    uint16_t BPB_FATSz16; // 16 位 FAT 表扇区数（对于 FAT32，这个值通常是 0）
+    uint16_t BPB_SecPerTrk; // 每磁道的扇区数
+    uint16_t BPB_NumHeads; // 磁头数
+    uint32_t BPB_HiddSec; // 隐藏扇区数
+    uint32_t BPB_TotSec32; // 32 位总扇区数
+    uint32_t BPB_FATSz32; // 32 位 FAT 表扇区数
+    uint16_t BPB_ExtFlags; // 扩展标志
+    uint16_t BPB_FSVer; // 文件系统版本
+    uint32_t BPB_RootClus; // 根目录簇号
+    uint16_t BPB_FSInfo; // 文件系统信息扇区号
+    uint16_t BPB_bkBootSec; // 备份引导扇区
+    uint8_t BPB_reserved[12]; // 保留字段
+    uint8_t BS_DrvNum; // 驱动器号
+    uint8_t BS_Reserved1; // 保留字段
+    uint8_t BS_BootSig; // 引导签名
+    uint32_t BS_VolID; // 卷序列号
+    uint8_t BS_VolLab[11]; // 卷标
+    uint8_t BS_FileSysTye[8]; // 文件系统类型
+    uint8_t  __padding_1[420]; // 填充字段，确保 BPB 结构的大小为 512 字节
+    uint16_t Signature_word; // 签名字，通常是 0xAA55
 } __attribute__((packed));
 
 // 目录项 (短文件名)
 struct DirEntry {
-    uint8_t DIR_Name[11];
-    uint8_t DIR_Attr;
-    uint8_t DIR_NTRes;
-    uint8_t DIR_CrtTimeTenth;
-    uint16_t DIR_CrtTime;
-    uint16_t DIR_CrtDate;
-    uint16_t DIR_LstAccDate;
-    uint16_t DIR_FstClusHI;
-    uint16_t DIR_WrtTime;
-    uint16_t DIR_WrtDate;
-    uint16_t DIR_FstClusLO;
-    uint32_t DIR_FileSize;
+    uint8_t DIR_Name[11]; // 文件名（8 字符）和扩展名（3 字符）
+    uint8_t DIR_Attr; // 文件属性
+    uint8_t DIR_NTRes; // 保留字段
+    uint8_t DIR_CrtTimeTenth; // 创建时间的十分之一秒
+    uint16_t DIR_CrtTime; // 创建时间
+    uint16_t DIR_CrtDate; // 创建日期
+    uint16_t DIR_LstAccDate; // 最后访问日期
+    uint16_t DIR_FstClusHI; // 文件起始簇号的高 16 位
+    uint16_t DIR_WrtTime; // 最后写入时间
+    uint16_t DIR_WrtDate; // 最后写入日期
+    uint16_t DIR_FstClusLO; // 文件起始簇号的低 16 位
+    uint32_t DIR_FileSize; // 文件大小
 } __attribute__((packed));
 
 // 目录项的属性，即 DIR_Attr 字段
 enum DirEntryAttributes {
-    READ_ONLY       = 0x01,
-    HIDDEN          = 0x02,
-    SYSTEM          = 0x04,
-    VOLUME_ID       = 0x08,
-    DIRECTORY       = 0x10,
-    ARCHIVE         = 0x20,
-    LONG_NAME       = 0x0F,
-    LONG_NAME_MASK  = 0x3F,
+    READ_ONLY       = 0x01, // 只读
+    HIDDEN          = 0x02, // 隐藏
+    SYSTEM          = 0x04, // 系统
+    VOLUME_ID       = 0x08, // 卷标
+    DIRECTORY       = 0x10, // 目录
+    ARCHIVE         = 0x20, // 归档
+    LONG_NAME       = 0x0F, // 长文件名
+    LONG_NAME_MASK  = 0x3F, // 长文件名掩码
 };
 
 // 用于存储文件名及文件大小
 struct FileInfo {
-    uint8_t DIR_Name[11];
-    uint32_t DIR_FileSize;
+    uint8_t DIR_Name[11]; // 文件名（8 字符）和扩展名（3 字符）
+    uint32_t DIR_FileSize; // 文件大小
 };
 
 // 用于存储一个目录文件中包含的所有文件的文件名及文件大小

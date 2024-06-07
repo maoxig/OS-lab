@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "fat32.h"
-
+#include <string.h>
+#include <assert.h>
 int main(){
     int mounted = fat_mount("fat32.img");
     assert(mounted == 0);
