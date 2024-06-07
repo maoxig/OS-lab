@@ -6,12 +6,14 @@
 int main(){
     int mounted = fat_mount("fat32.img");
     assert(mounted == 0);
-    int fd = fat_open("/exam_9.txt");
+    int fd = fat_open("/exam_7.txt");
     assert(fd != -1);
+    int read_num =16;
     char *buffer = (char *)malloc(128 * sizeof(char));
-    int Read_Size = fat_pread(fd, buffer, 3, 0);
-    assert(Read_Size == 3);
-    assert(strncmp(buffer, "Sec",3) == 0);
+    int Read_Size = fat_pread(fd, buffer, read_num, 4097);
+    assert(Read_Size == read_num);
+    printf("buf:%s\n",buffer);
+    assert(strncmp(buffer, "OTE: The type W",read_num) == 0);
     return 0;
 }
 

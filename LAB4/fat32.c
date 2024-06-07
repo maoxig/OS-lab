@@ -403,8 +403,8 @@ int fat_pread(int fd, void *buffer, int count, int offset)
             readable = count - bytes_read;
 
         // 读取数据到缓冲区
-        void *data=get_cluster_data(cluster);
-        memcpy((void*)buf,data,readable);
+        void *data = get_cluster_data(cluster);
+        memcpy(buf + bytes_read, data + cluster_offset, readable);
         bytes_read += readable;
         cluster_offset = 0; // 下一个簇从开始位置读
 
