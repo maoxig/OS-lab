@@ -7,22 +7,22 @@
 struct Fat32BPB {
     uint8_t BS_jmpBoot[3]; // 跳转指令，用于启动扇区
     uint8_t BS_oemName[8]; // OEM 名称，OEM 名称标识。可以通过 FAT 的实现设置为任何想要的值。通常这被标识为是什么系统格式化了该卷。
-    uint16_t BPB_BytsPerSec; // 每扇区的字节数,这个值通常只接受以下值：512, 1024, 2048 or 4096
-    uint8_t BPB_SecPerClus; // 每簇的扇区数,每个分配单元的扇区数。这个值必须是大于 0 的 2 的整数次方。合法值如下，1,2,4,8,16,32,64 和 128。
-    uint16_t BPB_RsvdSecCnt; // 从卷的第一个扇区开始的保留区域中的保留扇区数。
-    uint8_t BPB_NumFATs; // FAT 表的个数,通常推荐是 2, 即使 1 也是可以用的。
-    uint16_t BPB_rootEntCnt; // 根目录项数（对于 FAT32，这个值通常是 0）
-    uint16_t BPB_totSec16; // 16 位总扇区数（对于 FAT32，这个值通常是 0）
+    uint16_t BPB_BytsPerSec; //512// 每扇区的字节数,这个值通常只接受以下值：512, 1024, 2048 or 4096 ,
+    uint8_t BPB_SecPerClus; //8// 每簇的扇区数,每个分配单元的扇区数。这个值必须是大于 0 的 2 的整数次方。合法值如下，1,2,4,8,16,32,64 和 128。
+    uint16_t BPB_RsvdSecCnt; //32// 从卷的第一个扇区开始的保留区域中的保留扇区数。
+    uint8_t BPB_NumFATs; //2// FAT 表的个数,通常推荐是 2, 即使 1 也是可以用的。
+    uint16_t BPB_rootEntCnt; //0// 根目录项数（对于 FAT32，这个值通常是 0）
+    uint16_t BPB_totSec16; //0// 16 位总扇区数（对于 FAT32，这个值通常是 0）
     uint8_t BPB_media; // 媒体描述符
-    uint16_t BPB_FATSz16; // 16 位 FAT 表扇区数（对于 FAT32，这个值通常是 0）
+    uint16_t BPB_FATSz16; //0// 16 位 FAT 表扇区数（对于 FAT32，这个值通常是 0）
     uint16_t BPB_SecPerTrk; // 每磁道的扇区数
     uint16_t BPB_NumHeads; // 磁头数
     uint32_t BPB_HiddSec; // 隐藏扇区数
-    uint32_t BPB_TotSec32; // 32 位总扇区数
-    uint32_t BPB_FATSz32; // 32 位 FAT 表扇区数
+    uint32_t BPB_TotSec32; //131072// 32 位总扇区数
+    uint32_t BPB_FATSz32; //128// 32 位 FAT 表扇区数
     uint16_t BPB_ExtFlags; // 扩展标志
     uint16_t BPB_FSVer; // 文件系统版本
-    uint32_t BPB_RootClus; // 根目录簇号
+    uint32_t BPB_RootClus; //2// 根目录簇号
     uint16_t BPB_FSInfo; // 文件系统信息扇区号
     uint16_t BPB_bkBootSec; // 备份引导扇区
     uint8_t BPB_reserved[12]; // 保留字段
