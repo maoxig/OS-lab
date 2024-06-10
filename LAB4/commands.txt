@@ -1,0 +1,4 @@
+open /exam_1.txt
+read /exam_1.txt 756 1920
+readdir /DIR_2/PEOPLE/DMS2PH
+exit
