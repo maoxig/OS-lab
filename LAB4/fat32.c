@@ -489,11 +489,18 @@ int fat_pread(int fd, void *buffer, int count, int offset)
 
 // 读取目录内容的函数
 struct FilesInfo *fat_readdir(const char *path)
+//
 {
     int cluster;
     int size;
     if (parse_path(path, &cluster, &size) != 0)
     {
+        return NULL;
+    }
+    struct DirEntry *dir_entry = (struct DirEntry *)get_cluster_data(cluster);
+    if ((dir_entry->DIR_Attr & DIRECTORY) == 0) // 是一个目录
+    {
+        printf("cannot read a file!\n");
         return NULL;
     }
     return read_directory(cluster);
