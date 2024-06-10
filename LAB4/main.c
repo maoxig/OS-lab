@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
         //printf("Enter command (type 'exit' to quit): ");
         fgets(command, MAX_COMMAND_LENGTH, stdin);
         command[strcspn(command,"\n")]='\0';
-        printf("now cmd:%s",command);
+        //printf("now cmd:%s",command);
         if (strcmp(command, "exit") == 0)
         {
             break;
@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
                 buffer[read_size] = '\0'; // Ensure null-terminated string
                 printf("Read %d bytes from file_fd %d: %s\n", read_size, fd, buffer);
                 free(buffer);
-                fat_close(fd);
+                //fat_close(fd);
             }
             else
             {

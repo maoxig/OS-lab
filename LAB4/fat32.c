@@ -169,7 +169,7 @@ static void *get_cluster_data(int cluster)
 {
 
     int sector = hdr->BPB_RsvdSecCnt + (hdr->BPB_NumFATs * hdr->BPB_FATSz32) + ((cluster - 2) * hdr->BPB_SecPerClus);
-    printf("get_cluster_data of cluster :%d, sector:%d\n", cluster, sector);
+    //printf("get_cluster_data of cluster :%d, sector:%d\n", cluster, sector);
     return (void *)((char *)hdr + sector_to_offset(sector));
 }
 
@@ -181,7 +181,7 @@ static int next_cluster(int cluster)
     int fat_offset = (cluster * 4) % hdr->BPB_BytsPerSec;
     uint32_t *fat_entry = (uint32_t *)((char *)hdr + sector_to_offset(fat_sector) + fat_offset);
     printf("fat_entry:%x result:%d\n", fat_entry, *fat_entry & 0x0FFFFFFF);
-    if (*fat_entry < 0xFFFFFF8)
+    if (*fat_entry& 0x0FFFFFFF < 0x0FFFFFF8)
     {
         printf("The last cluster!\n");
     } // 文件的最后一个簇
@@ -295,9 +295,9 @@ static int parse_path(const char *path, int *target_cluster, int *size)
         // 如果找到的是文件，则返回
         if ((dir_entry->DIR_Attr & DIRECTORY) == 0)
         { // 不是目录
-            printf("is not a directory!\n");
+            //printf("is not a directory!\n");
             *target_cluster = (dir_entry->DIR_FstClusHI << 16) | dir_entry->DIR_FstClusLO; // TODO error cluster
-            printf("??cluster:%d\n", *target_cluster);
+            //printf("??cluster:%d\n", *target_cluster);
             *size = current_dir_files->files[file_index].DIR_FileSize;
             free(current_dir_files->files);
             free(current_dir_files);
@@ -480,7 +480,7 @@ int fat_pread(int fd, void *buffer, int count, int offset)
         if (bytes_read < count)
         {
             cluster = next_cluster(cluster);
-            if (cluster == 0)
+            if (cluster >= 0x0FFFFFF8 ||cluster <0)
                 break; // 文件结束
         }
     }
