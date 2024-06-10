@@ -118,6 +118,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    fat_mount(NULL); // Unmount the image
+    //fat_mount(NULL); // Unmount the image
     return 0;
 }
