@@ -388,11 +388,12 @@ int fat_open(const char *path)
         return -1; // 未挂载
 
     // 解析路径，找到文件对应的起始簇号和大小
-    int cluster, size;
+    int cluster=0;
+    int size=0;
     int result = parse_path(path, &cluster, &size);
 
-    struct DirEntry *dir_entry = (struct DirEntry *)get_cluster_data(cluster);
-    if ((dir_entry->DIR_Attr & DIRECTORY) != 0) // 是一个目录
+
+    if (size ==0) // 是一个目录
     {
         printf("cannot open a dir!\n");
         return -1;
@@ -491,16 +492,16 @@ int fat_pread(int fd, void *buffer, int count, int offset)
 struct FilesInfo *fat_readdir(const char *path)
 //
 {
-    int cluster;
-    int size;
+    int cluster=0;
+    int size=0;
     if (parse_path(path, &cluster, &size) != 0)
     {
         return NULL;
     }
-    struct DirEntry *dir_entry = (struct DirEntry *)get_cluster_data(cluster);
-    if ((dir_entry->DIR_Attr & DIRECTORY) == 0) // 是一个目录
+    
+    if (size != 0) // 是一个file
     {
-        printf("cannot read a file!\n");
+        printf("cannot read a file!size:%d\n",size);
         return NULL;
     }
     return read_directory(cluster);
