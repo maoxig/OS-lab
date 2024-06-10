@@ -394,6 +394,7 @@ int fat_open(const char *path)
     struct DirEntry *dir_entry = (struct DirEntry *)get_cluster_data(cluster);
     if ((dir_entry->DIR_Attr & DIRECTORY) != 0) // 是一个目录
     {
+        printf("cannot open a dir!\n");
         return -1;
     }
 
