@@ -26,7 +26,12 @@ struct OpenFile
     int size;
 };
 struct OpenFile open_files[MAX_OPEN_FILES];
-
+void init_OPT() {
+    for (int i = 0; i < MAX_OPEN_FILES; i++) {
+        open_files[i].cluster = -1;
+        open_files[i].size = 0; // 如果你也需要初始化size，可以在这里设置
+    }
+}
 // 辅助函数：将扇区号转换为字节偏移量
 static inline int sector_to_offset(int sector)
 {
@@ -320,7 +325,7 @@ static int parse_path(const char *path, int *target_cluster, int *size)
     free(path_copy);
 
     *target_cluster = current_cluster;
-    *size = 0;
+    *size = -1;//约定size=-1来标识对应的路径终点是一个目录
     return 0;
 }
 
@@ -373,6 +378,7 @@ int fat_mount(const char *path)
     printf("reserved sectors %d, \n", hdr->BPB_RsvdSecCnt);
 
     // 挂载成功
+    init_OPT();
     mounted = 0;
     return 0;
 }
@@ -388,7 +394,8 @@ int fat_open(const char *path)
     int size = 0;
     int result = parse_path(path, &cluster, &size);
 
-    if (size == 0) // 是一个目录
+
+    if (size == -1) // 是一个目录
     {
         // printf("cannot open a dir!\n");
         return -1;
@@ -402,7 +409,7 @@ int fat_open(const char *path)
 
     for (int i = 0; i < MAX_OPEN_FILES; ++i)
     {
-        if (open_files[i].cluster == 0)
+        if (open_files[i].cluster == -1)
         {                                    // 找到一个空闲的文件描述符
             open_files[i].cluster = cluster; // 假定 cluster 是路径解析后得到的簇号
             open_files[i].size = size;       // 假定 size 是路径解析后得到的文件大小
@@ -421,10 +428,10 @@ int fat_close(int fd)
     {
         return -1;
     }
-    if (fd < 0 || fd >= MAX_OPEN_FILES || open_files[fd].cluster == 0)
+    if (fd < 0 || fd >= MAX_OPEN_FILES || open_files[fd].cluster == -1)
         return -1;
 
-    open_files[fd].cluster = 0; // 清空文件描述符
+    open_files[fd].cluster = -1; // 清空文件描述符
     open_files[fd].size = 0;
     return 0;
 }
@@ -439,7 +446,7 @@ int fat_pread(int fd, void *buffer, int count, int offset)
     {
         return -1;
     }
-    if (fd < 0 || fd >= MAX_OPEN_FILES || open_files[fd].cluster == 0 || count<0)
+    if (fd < 0 || fd >= MAX_OPEN_FILES || open_files[fd].cluster == -1 || count<0)
         return -1;
     // 获取文件大小
     int fileSize = open_files[fd].size;
@@ -506,7 +513,7 @@ struct FilesInfo *fat_readdir(const char *path)
         return NULL;
     }
 
-    if (size != 0) // 是一个file
+    if (size != -1) // 是一个file
     {
         // printf("cannot read a file!size:%d\n",size);
         return NULL;
