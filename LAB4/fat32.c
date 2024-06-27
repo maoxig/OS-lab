@@ -43,12 +43,13 @@ static void parse_directory_entries(void *cluster_data, struct FilesInfo *files_
             // 到达目录的末尾
             break;
         }
-        if (entry->DIR_Name[0] != 0xE5)
+        if (entry->DIR_Name[0] != 0xE5 && (entry->DIR_Attr & LONG_NAME_MASK) != LONG_NAME)
         {
             // 不是删除的条目
             // printf(" entry_name: %s, entry_cluster:%d ,entry:%x\n", (char *)entry->DIR_Name, entry->DIR_FstClusHI << 16 | entry->DIR_FstClusLO, entry);
-            // printf("entry_dir_name:%s\n",(char *)entry->DIR_Name);
-            strncpy((char *)files_info->files[files_info->size].DIR_Name, (char *)entry->DIR_Name, 11);
+            //printf("entry_dir_name:%s,len:%d\n",(char *)entry->DIR_Name,strlen((char *)entry->DIR_Name));
+            memcpy((char *)files_info->files[files_info->size].DIR_Name, (char *)entry->DIR_Name, 11);
+            //printf("file name:%s,len:%d\n",(char *)files_info->files[files_info->size].DIR_Name,strlen((char *)files_info->files[files_info->size].DIR_Name));
             files_info->files[files_info->size].DIR_FileSize = entry->DIR_FileSize;
             files_info->size++;
         }
@@ -62,12 +63,13 @@ static struct FilesInfo *read_directory(int cluster_number)
     struct FilesInfo *files_info = malloc(sizeof(struct FilesInfo));
     if (!files_info)
         return NULL; // 内存分配失败
-    files_info->files = malloc(MAX_OPEN_FILES * sizeof(struct FileInfo));
+    files_info->files = malloc(MAX_OPEN_FILES* sizeof(struct FileInfo));
     if (!files_info->files)
     {
         free(files_info);
         return NULL; // 内存分配失败
     }
+    memset(files_info->files,0,MAX_OPEN_FILES* sizeof(struct FileInfo));
     files_info->size = 0;
 
     void *cluster_data;
@@ -215,7 +217,7 @@ static int read_directory_entry(int dir_cluster, int logical_index, struct DirEn
             struct DirEntry *target_entry = (struct DirEntry *)((char *)dir_data + i * sizeof(struct DirEntry));
 
             // 跳过删除的条目和长文件名条目
-            if (target_entry->DIR_Name[0] == 0xE5) // || (target_entry->DIR_Attr & LONG_NAME_MASK) == LONG_NAME
+            if (target_entry->DIR_Name[0] == 0xE5|| (target_entry->DIR_Attr & LONG_NAME_MASK) == LONG_NAME) // 
             {
                 continue;
             }
@@ -437,7 +439,7 @@ int fat_pread(int fd, void *buffer, int count, int offset)
     {
         return -1;
     }
-    if (fd < 0 || fd >= MAX_OPEN_FILES || open_files[fd].cluster == 0)
+    if (fd < 0 || fd >= MAX_OPEN_FILES || open_files[fd].cluster == 0 || count<0)
         return -1;
     // 获取文件大小
     int fileSize = open_files[fd].size;
@@ -457,14 +459,14 @@ int fat_pread(int fd, void *buffer, int count, int offset)
     int start_cluster = offset / cluster_size;
 
     // 跳转到正确的簇
-    for (int i = 0; i < start_cluster; ++i)
+    for (int i = 0; i < start_cluster; i++)
     {
         cluster = next_cluster(cluster);
     }
 
     // 读取数据
     int bytes_read = 0;
-    char *buf = (char *)buffer;
+    //char *buf = (char *)buffer;
     while (bytes_read < count)
     {
         // 计算当前簇可读字节数
@@ -474,7 +476,7 @@ int fat_pread(int fd, void *buffer, int count, int offset)
 
         // 读取数据到缓冲区
         void *data = get_cluster_data(cluster);
-        memcpy(buf + bytes_read, data + cluster_offset, readable);
+        memcpy((char*)buffer + bytes_read, data + cluster_offset, readable);
         bytes_read += readable;
         cluster_offset = 0; // 下一个簇从开始位置读
 
@@ -482,11 +484,11 @@ int fat_pread(int fd, void *buffer, int count, int offset)
         if (bytes_read < count)
         {
             cluster = next_cluster(cluster);
-            if (cluster >= 0x0FFFFFF8 || cluster <= 0)
-                break; // 文件结束
+            // if (cluster >= 0x0FFFFFF8)
+            //     break; // 文件结束
         }
     }
-    return bytes_read;
+    return count;
 }
 
 // 读取目录内容的函数
