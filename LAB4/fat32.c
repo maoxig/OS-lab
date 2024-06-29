@@ -8,7 +8,7 @@
 #include <sys/mman.h>
 #include "fat32.h"
 static inline int sector_to_offset(int sector);
-static void parse_directory_entries(void *cluster_data, struct FilesInfo *files_info, int show_all);
+static int parse_directory_entries(void *cluster_data, struct FilesInfo *files_info, int show_all);
 static struct FilesInfo *read_directory(int cluster_number, int all);
 static int find_in_directory(const char *filename, struct FilesInfo *dir_files);
 static void *get_cluster_data(int cluster);
@@ -40,17 +40,18 @@ static inline int sector_to_offset(int sector)
     return sector * hdr->BPB_BytsPerSec;
 }
 // 辅助函数：解析目录簇中的文件信息
-static void parse_directory_entries(void *cluster_data, struct FilesInfo *files_info, int show_all)
+static int  parse_directory_entries(void *cluster_data, struct FilesInfo *files_info, int show_all)
 {
     struct DirEntry *entry = (struct DirEntry *)cluster_data;
-    for (int i = 0; i < (hdr->BPB_BytsPerSec * hdr->BPB_SecPerClus) / sizeof(struct DirEntry); i++)
+    int dir_entry_num =  (hdr->BPB_BytsPerSec * hdr->BPB_SecPerClus) / sizeof(struct DirEntry);
+    for (int i = 0; i < dir_entry_num; i++)
     {
         if (entry->DIR_Name[0] == 0x00)
         {
             // 到达目录的末尾
-            break;
+            break;;
         }
-        if (show_all || entry->DIR_Name[0] != 0xE5 && (entry->DIR_Attr & LONG_NAME_MASK) != LONG_NAME) //
+        if (show_all || ((entry->DIR_Name[0] != 0xE5) && ((entry->DIR_Attr & LONG_NAME_MASK) != LONG_NAME))) //
         {
             // 不是删除的条目
             // printf(" entry_name: %s, entry_cluster:%d ,entry:%x\n", (char *)entry->DIR_Name, entry->DIR_FstClusHI << 16 | entry->DIR_FstClusLO, entry);
@@ -62,7 +63,9 @@ static void parse_directory_entries(void *cluster_data, struct FilesInfo *files_
         }
         entry++;
     }
+    
     // printf("parse_directory_entries, files_info_size:%d", files_info->size);
+    return 0;
 }
 // 辅助函数：计算目录占用的簇的数量
 static int count_clusters(int cluster_number)
@@ -90,14 +93,14 @@ static struct FilesInfo *read_directory(int cluster_number, int show_all) // 这
     }
     // printf("cluster_count:%d\n",cluster_count);
     int max_dir_num = cluster_count * hdr->BPB_BytsPerSec * hdr->BPB_SecPerClus / sizeof(struct DirEntry);
-    files_info->files = malloc(max_dir_num * sizeof(struct FileInfo));
+    files_info->files = malloc((max_dir_num + 1) * sizeof(struct FileInfo));
     if (!files_info->files)
     {
         free(files_info);
         return NULL; // 内存分配失败
     }
-    // memset(files_info,0,sizeof(struct FilesInfo));
-    memset(files_info->files, 0, max_dir_num * sizeof(struct FileInfo));
+    //memset(files_info,0,sizeof(struct FilesInfo));
+    //memset(files_info->files, 0,(max_dir_num + 1)* sizeof(struct FileInfo));
     files_info->size = 0;
 
     void *cluster_data;
@@ -116,7 +119,9 @@ static struct FilesInfo *read_directory(int cluster_number, int show_all) // 这
             return NULL;
         }
         // printf("succeed to read cluster data\n");
-        parse_directory_entries(cluster_data, files_info, show_all);
+        if(parse_directory_entries(cluster_data, files_info, show_all)==-1){
+            return NULL;
+        }
         // printf("cluster_data_addr_new:%x\n",(void*)cluster_data);
         cluster_number = next_cluster(cluster_number);
     }
@@ -126,7 +131,7 @@ static struct FilesInfo *read_directory(int cluster_number, int show_all) // 这
 // 辅助函数：在目录中查找文件或子目录
 static int find_in_directory(const char *filename, struct FilesInfo *dir_files)
 {
-    for (int i = 0; i < dir_files->size; ++i)
+    for (int i = 0; i < dir_files->size; i++)
     {
         struct FileInfo *file_info = &dir_files->files[i];
         if (file_info->DIR_Name[0] == 0xE5) //
@@ -144,13 +149,13 @@ static int find_in_directory(const char *filename, struct FilesInfo *dir_files)
         char dos_filename[11];
         strncpy(dos_filename, file_name, 8); // 只复制前8个字符
         dos_filename[8] = '\0';              // 确保字符串以null终止
-        for (int j = 0; dos_filename[j] != '\0'; ++j)
+        for (int j = 0; dos_filename[j] != '\0'; j++)
         {
             dos_filename[j] = toupper(dos_filename[j]); // 转换为大写
         }
 
         // 填充剩余的字符为空格
-        for (int j = strlen(dos_filename); j < 8; ++j)
+        for (int j = strlen(dos_filename); j < 8; j++)
         {
             dos_filename[j] = ' '; // 填充剩余的字符为空格
         }
@@ -240,6 +245,7 @@ static int read_directory_entry(int dir_cluster, int index, struct DirEntry *ent
     }
     struct DirEntry *target_entry = (struct DirEntry *)((char *)dir_data + cluster_offset * sizeof(struct DirEntry));
     memcpy(entry, target_entry, sizeof(struct DirEntry));
+    return 0;
 }
 
 // 路径解析函数
@@ -282,14 +288,19 @@ static int parse_path(const char *path, int *target_cluster, int *size, int *is_
         // 获取当前文件或目录的信息
         struct DirEntry *dir_entry = malloc(sizeof(struct DirEntry));
         int read_result = read_directory_entry(current_cluster, file_index, dir_entry); // TODO change it!
-
+        if (read_result==-1)
+        {
+            free(dir_entry);
+            return -1;
+        }
+        
         // 如果找到的是文件，则返回
         if ((dir_entry->DIR_Attr & DIRECTORY) == 0)
         { // 不是目录
             // printf("is not a directory!\n");
             *target_cluster = (dir_entry->DIR_FstClusHI << 16) | dir_entry->DIR_FstClusLO;
             // printf("??cluster:%d\n", *target_cluster);
-            *size = current_dir_files->files[file_index].DIR_FileSize;
+            *size = dir_entry->DIR_FileSize;
             *is_file = 1;
             free(current_dir_files->files);
             free(current_dir_files);
@@ -299,9 +310,9 @@ static int parse_path(const char *path, int *target_cluster, int *size, int *is_
         // 更新当前簇号
         current_cluster = (dir_entry->DIR_FstClusHI << 16) | dir_entry->DIR_FstClusLO;
 
-        // 读取下一个目录
-        // free(current_dir_files->files);
-        // free(current_dir_files);
+        //读取下一个目录
+        free(current_dir_files->files);
+        free(current_dir_files);
         current_dir_files = read_directory(current_cluster, 1);
         if (!current_dir_files)
         {
