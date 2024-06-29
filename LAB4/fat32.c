@@ -9,12 +9,12 @@
 #include "fat32.h"
 static inline int sector_to_offset(int sector);
 static void parse_directory_entries(void *cluster_data, struct FilesInfo *files_info, int show_all);
-static struct FilesInfo *read_directory(uint32_t cluster_number, int all);
+static struct FilesInfo *read_directory(int cluster_number, int all);
 static int find_in_directory(const char *filename, struct FilesInfo *dir_files);
-static void *get_cluster_data(uint32_t cluster);
-static uint32_t next_cluster(uint32_t cluster);
-static int read_directory_entry(uint32_t dir_sector, int index, struct DirEntry *entry);
-static int parse_path(const char *path, uint32_t *cluster, int *size, int *is_file);
+static void *get_cluster_data(int cluster);
+static int next_cluster(int cluster);
+static int read_directory_entry(int dir_sector, int index, struct DirEntry *entry);
+static int parse_path(const char *path, int *cluster, int *size, int *is_file);
 struct Fat32BPB *hdr; // 指向 BPB 的数据
 int mounted = -1;     // 是否已挂载成功
 
@@ -22,8 +22,8 @@ int mounted = -1;     // 是否已挂载成功
 #define MAX_OPEN_FILES 128
 struct OpenFile
 {
-    uint32_t cluster;
-    uint32_t size;
+    int cluster;
+    int size;
 };
 struct OpenFile open_files[MAX_OPEN_FILES];
 void init_OPT()
@@ -65,7 +65,7 @@ static void parse_directory_entries(void *cluster_data, struct FilesInfo *files_
     // printf("parse_directory_entries, files_info_size:%d", files_info->size);
 }
 // 辅助函数：计算目录占用的簇的数量
-static int count_clusters(uint32_t cluster_number)
+static int count_clusters(int cluster_number)
 {
     int count = 0;
     while (cluster_number < 0x0FFFFFF8)
@@ -76,7 +76,7 @@ static int count_clusters(uint32_t cluster_number)
     return count;
 }
 // 辅助函数：读取目录内容
-static struct FilesInfo *read_directory(uint32_t cluster_number, int show_all) // 这个函数会读出来所有的包括删除项的目录项，根据下标可以找到对应的位置
+static struct FilesInfo *read_directory(int cluster_number, int show_all) // 这个函数会读出来所有的包括删除项的目录项，根据下标可以找到对应的位置
 {
     struct FilesInfo *files_info = malloc(sizeof(struct FilesInfo));
     if (!files_info)
@@ -196,7 +196,7 @@ static int find_in_directory(const char *filename, struct FilesInfo *dir_files)
     return -1; // 表示没有找到文件
 }
 // 辅助函数：获取指定簇的数据
-static void *get_cluster_data(uint32_t cluster)
+static void *get_cluster_data(int cluster)
 {
 
     int sector = hdr->BPB_RsvdSecCnt + hdr->BPB_FATSz32 * hdr->BPB_NumFATs + (cluster - 2) * hdr->BPB_SecPerClus;
@@ -204,7 +204,7 @@ static void *get_cluster_data(uint32_t cluster)
 }
 
 // 辅助函数：获取下一个簇号
-static uint32_t next_cluster(uint32_t cluster)
+static int next_cluster(int cluster)
 {
     // 计算 FAT 表的起始扇区和偏移量
     int fat_sector = hdr->BPB_RsvdSecCnt + (cluster * 4 / (hdr->BPB_BytsPerSec));
@@ -219,12 +219,12 @@ static uint32_t next_cluster(uint32_t cluster)
 }
 
 // 辅助函数：读取目录项
-static int read_directory_entry(uint32_t dir_cluster, int index, struct DirEntry *entry)
+static int read_directory_entry(int dir_cluster, int index, struct DirEntry *entry)
 {
     // 每个簇可以容纳的目录项数量
     int entries_per_cluster = (hdr->BPB_BytsPerSec * hdr->BPB_SecPerClus) / sizeof(struct DirEntry);
     // printf("entries_per_cluster:%d\n",entries_per_cluster);
-    uint32_t cluster = dir_cluster;
+    int cluster = dir_cluster;
     int start_cluster = index / entries_per_cluster;
     int cluster_offset = index % entries_per_cluster;
 
@@ -243,11 +243,11 @@ static int read_directory_entry(uint32_t dir_cluster, int index, struct DirEntry
 }
 
 // 路径解析函数
-static int parse_path(const char *path, uint32_t *target_cluster, int *size, int *is_file)
+static int parse_path(const char *path, int *target_cluster, int *size, int *is_file)
 {
     *is_file = 0;
     // 根目录的簇号是 2
-    uint32_t current_cluster = hdr->BPB_RootClus; // 2
+    int current_cluster = hdr->BPB_RootClus; // 2
 
     // 复制路径以避免修改原始路径
     char *path_copy = strdup(path);
@@ -293,7 +293,6 @@ static int parse_path(const char *path, uint32_t *target_cluster, int *size, int
             *is_file = 1;
             free(current_dir_files->files);
             free(current_dir_files);
-            free(path_copy);
             return 0; // 返回 0 表示解析成功
         }
 
@@ -318,7 +317,7 @@ static int parse_path(const char *path, uint32_t *target_cluster, int *size, int
     free(path_copy);
 
     *target_cluster = current_cluster;
-    *size = 0; 
+    *size = 0; // 约定size=-1来标识对应的路径终点是一个目录
     return 0;
 }
 
@@ -384,7 +383,7 @@ int fat_open(const char *path)
     if (path[0] != '/')
         return -1;
     // 解析路径，找到文件对应的起始簇号和大小
-    uint32_t cluster = 0;
+    int cluster = 0;
     int size = 0;
     int is_file = 0;
     int result = parse_path(path, &cluster, &size, &is_file);
@@ -400,10 +399,7 @@ int fat_open(const char *path)
         // printf("path_parse failed!\n");
         return -1; // 路径解析失败
     }
-    if (cluster <=2||cluster==-1)
-    {
-        return -1;
-    }
+
     for (int i = 0; i < MAX_OPEN_FILES; i++)
     {
         if (open_files[i].cluster == -1)
@@ -457,7 +453,7 @@ int fat_pread(int fd, void *buffer, int count, int offset)
         count = fileSize - offset;
 
     // 计算读取的起始簇和偏移量
-    uint32_t cluster = open_files[fd].cluster;
+    int cluster = open_files[fd].cluster;
     int cluster_size = hdr->BPB_BytsPerSec * hdr->BPB_SecPerClus;
     int cluster_offset = offset % cluster_size;
     int start_cluster = offset / cluster_size;
@@ -468,24 +464,28 @@ int fat_pread(int fd, void *buffer, int count, int offset)
         cluster = next_cluster(cluster);
     }
 
-    // 读取数据
+    /// 读取数据
     int bytes_read = 0;
+    // char *buf = (char *)buffer;
     while (bytes_read < count)
     {
-        int remain = cluster_size - cluster_offset; // 剩下可读字节数
-        if (remain >= count - bytes_read)                // 可以在这个簇中读完
+        // 计算当前簇可读字节数
+        int readable = cluster_size - cluster_offset;
+        if (readable > count - bytes_read)
+            readable = count - bytes_read;
+
+        // 读取数据到缓冲区
+        void *data = get_cluster_data(cluster);
+        memcpy((char *)buffer + bytes_read, data + cluster_offset, readable);
+        bytes_read += readable;
+        cluster_offset = 0; // 下一个簇从开始位置读
+
+        // 检查是否需要读取下一个簇
+        if (bytes_read < count)
         {
-            void *data = get_cluster_data(cluster); // 获取数据所在位置并指向这堆数据
-            memcpy((char *)buffer + bytes_read, data + cluster_offset, count - bytes_read);
-            bytes_read = count;
-        }
-        else
-        {
-            void *data = get_cluster_data(cluster);
-            memcpy((char *)buffer + bytes_read, data + cluster_offset, remain);
-            cluster_offset = 0;
             cluster = next_cluster(cluster);
-            bytes_read += remain;
+            // if (cluster >= 0x0FFFFFF8)
+            //     break; // 文件结束
         }
     }
     return count;
@@ -499,7 +499,7 @@ struct FilesInfo *fat_readdir(const char *path)
     {
         return NULL;
     }
-    uint32_t cluster  = 0;
+    int cluster = 0;
     int size = 0;
     int is_file = 0;
     if (parse_path(path, &cluster, &size, &is_file) != 0)

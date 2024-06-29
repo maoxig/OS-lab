@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
             {
                 char *buffer = (char *)malloc(count + 1);
                 int read_size = fat_pread(fd, buffer, count, offset);
-                buffer[read_size] = '\0'; // Ensure null-terminated string
+                //buffer[read_size] = '\0'; // Ensure null-terminated string
                 printf("Read %d bytes from file_fd %d: %s\n", read_size, fd, buffer);
                 free(buffer);
                 //fat_close(fd);
