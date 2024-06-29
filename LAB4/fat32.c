@@ -40,16 +40,17 @@ static inline int sector_to_offset(int sector)
     return sector * hdr->BPB_BytsPerSec;
 }
 // 辅助函数：解析目录簇中的文件信息
-static int  parse_directory_entries(void *cluster_data, struct FilesInfo *files_info, int show_all)
+static int parse_directory_entries(void *cluster_data, struct FilesInfo *files_info, int show_all)
 {
     struct DirEntry *entry = (struct DirEntry *)cluster_data;
-    int dir_entry_num =  (hdr->BPB_BytsPerSec * hdr->BPB_SecPerClus) / sizeof(struct DirEntry);
+    int dir_entry_num = (hdr->BPB_BytsPerSec * hdr->BPB_SecPerClus) / sizeof(struct DirEntry);
     for (int i = 0; i < dir_entry_num; i++)
     {
         if (entry->DIR_Name[0] == 0x00)
         {
             // 到达目录的末尾
-            break;;
+            break;
+            ;
         }
         if (show_all || ((entry->DIR_Name[0] != 0xE5) && ((entry->DIR_Attr & LONG_NAME_MASK) != LONG_NAME))) //
         {
@@ -63,7 +64,7 @@ static int  parse_directory_entries(void *cluster_data, struct FilesInfo *files_
         }
         entry++;
     }
-    
+
     // printf("parse_directory_entries, files_info_size:%d", files_info->size);
     return 0;
 }
@@ -99,8 +100,8 @@ static struct FilesInfo *read_directory(int cluster_number, int show_all) // 这
         free(files_info);
         return NULL; // 内存分配失败
     }
-    //memset(files_info,0,sizeof(struct FilesInfo));
-    //memset(files_info->files, 0,(max_dir_num + 1)* sizeof(struct FileInfo));
+    // memset(files_info,0,sizeof(struct FilesInfo));
+    // memset(files_info->files, 0,(max_dir_num + 1)* sizeof(struct FileInfo));
     files_info->size = 0;
 
     void *cluster_data;
@@ -119,7 +120,8 @@ static struct FilesInfo *read_directory(int cluster_number, int show_all) // 这
             return NULL;
         }
         // printf("succeed to read cluster data\n");
-        if(parse_directory_entries(cluster_data, files_info, show_all)==-1){
+        if (parse_directory_entries(cluster_data, files_info, show_all) == -1)
+        {
             return NULL;
         }
         // printf("cluster_data_addr_new:%x\n",(void*)cluster_data);
@@ -263,6 +265,7 @@ static int parse_path(const char *path, int *target_cluster, int *size, int *is_
     { // 不是以/开头
         return -1;
     }
+
     struct FilesInfo *current_dir_files = read_directory(current_cluster, 1);
     // printf("info addr:%x\n",(void*)current_dir_files);
     if (!current_dir_files)
@@ -273,6 +276,7 @@ static int parse_path(const char *path, int *target_cluster, int *size, int *is_
     }
     // printf("success find current_dir_files\n");
     char *token = strtok(path_copy, "/");
+    // TRue1
     while (token != NULL)
     {
         int file_index = find_in_directory(token, current_dir_files);
@@ -288,12 +292,12 @@ static int parse_path(const char *path, int *target_cluster, int *size, int *is_
         // 获取当前文件或目录的信息
         struct DirEntry *dir_entry = malloc(sizeof(struct DirEntry));
         int read_result = read_directory_entry(current_cluster, file_index, dir_entry); // TODO change it!
-        if (read_result==-1)
+        if (read_result == -1)
         {
             free(dir_entry);
             return -1;
         }
-        
+
         // 如果找到的是文件，则返回
         if ((dir_entry->DIR_Attr & DIRECTORY) == 0)
         { // 不是目录
@@ -310,7 +314,7 @@ static int parse_path(const char *path, int *target_cluster, int *size, int *is_
         // 更新当前簇号
         current_cluster = (dir_entry->DIR_FstClusHI << 16) | dir_entry->DIR_FstClusLO;
 
-        //读取下一个目录
+        // 读取下一个目录
         free(current_dir_files->files);
         free(current_dir_files);
         current_dir_files = read_directory(current_cluster, 1);
@@ -387,17 +391,20 @@ int fat_mount(const char *path)
 }
 
 // 打开文件
-int fat_open(const char *path)
+int old_fat_open(const char *path)
 {
     if (mounted == -1)
         return -1; // 未挂载
     if (path[0] != '/')
         return -1;
     // 解析路径，找到文件对应的起始簇号和大小
-    int cluster = 0;
+    int cluster = -1;
     int size = 0;
     int is_file = 0;
     int result = parse_path(path, &cluster, &size, &is_file);
+
+    char *path_copy = strdup(path);
+    char *args[128];
 
     if (is_file == 0) // 是一个目录
     {
@@ -424,7 +431,105 @@ int fat_open(const char *path)
     // printf("cannot open more file!\n");
     return -1; // 打开文件数达到上限
 }
+int fat_open(const char *path)
+{
+    if (mounted == -1)
+        return -1; // 文件系统未挂载
+    if (path[0] != '/')
+        return -1; // 路径不是以根目录开始
 
+    char *buf = strdup(path); // 使用strdup避免内存泄漏
+    // printf("now:buf%s\n",buf);
+    char *token = strtok(buf, "/");
+    if (token != NULL && *token == '\0')
+    { // 跳过第一个"/"
+        token = strtok(NULL, "/");
+    }
+    // printf("now:token");
+    // printf("now:token:%s\n",token);
+    struct DirEntry *Dir;
+    uint32_t cluster = hdr->BPB_RootClus;
+    int max_DirEntry = hdr->BPB_BytsPerSec * hdr->BPB_SecPerClus / 32;
+
+    while (token != NULL)
+    {
+        char *filename = token;               // 直接使用token
+        char *extension = strchr(token, '.'); // 查找扩展名
+        char compare_str[11] = {0};
+
+        // 将文件名转换成8.3格式
+        memset(compare_str, ' ', 11); // 初始化为空格
+        if (extension)
+        {
+            strncpy(compare_str, filename, extension - filename); // 复制文件名
+            strncpy(compare_str + 8, extension + 1, 3);           // 复制后缀
+        }
+        else
+        {
+            strncpy(compare_str, filename, strlen(filename)); // 只有文件名，没有后缀
+        }
+        // 将compare_str转换成大写
+        for (int i = 0; i < 11; ++i)
+        {
+            compare_str[i] = toupper(compare_str[i]);
+        }
+        int count_dir = 0;
+        while (count_dir <= max_DirEntry)
+        {
+            if (count_dir == max_DirEntry)
+            {
+                cluster = next_cluster(cluster);
+                count_dir = 0;
+                if (cluster >= 0x0FFFFFF8)
+                {
+
+                    free(buf);
+                    return -1;
+                }
+            }
+
+            Dir = (struct DirEntry *)get_cluster_data(cluster) + count_dir;
+            if (Dir->DIR_Name[0] == 0x00)
+            { // 未使用的目录项
+                free(buf);
+                return -1;
+            }
+            // printf("dir_name:'%s',compare_name:'%s'\n",Dir->DIR_Name,compare_str);
+            if (Dir->DIR_Name[0] != 0xE5 && strncmp(Dir->DIR_Name, compare_str, 11) == 0)
+            {
+
+                cluster = Dir->DIR_FstClusHI << 16 | Dir->DIR_FstClusLO;
+                if (Dir->DIR_Attr & DIRECTORY)
+                { // 是一个目录
+                    break;
+                }
+                else
+                { // 是一个文件
+                    // 直接在这里查找空闲的文件描述符
+                    for (int i = 0; i < MAX_OPEN_FILES; i++)
+                    {
+                        if (open_files[i].cluster == -1)
+                        {
+                            open_files[i].cluster = cluster;
+                            open_files[i].size = Dir->DIR_FileSize;
+                            free(buf);
+                            return i; // 返回文件描述符
+                        }
+                    }
+                    free(buf);
+                    return -1; // 打开文件数达到上限
+                }
+            }
+            count_dir++;
+        }
+
+        token = strtok(NULL, "/");
+        // printf("token:'%s'\n",token);
+    }
+
+    free(buf);
+    return -1; // 如果路径为空或未找到文件
+}
 // 关闭文件
 int fat_close(int fd)
 {
